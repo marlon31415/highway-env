@@ -21,7 +21,7 @@ class MergeEnv(AbstractEnv):
 
     @classmethod
     def default_config(cls) -> dict:
-        cfg = super().default_config()
+        cfg = super().default_config_abstract()
         cfg.update({
             "collision_reward": -1,
             "right_lane_reward": 0.1,

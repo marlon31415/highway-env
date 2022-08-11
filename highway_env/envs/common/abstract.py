@@ -18,6 +18,12 @@ from highway_env.vehicle.kinematics import Vehicle
 
 Observation = np.ndarray
 
+#=================================================================
+
+# code zwischen den strichen ist dem originalcode hinzugefuegt
+
+#=================================================================
+
 class AbstractEnv(gym.Env):
 
     """
@@ -33,7 +39,7 @@ class AbstractEnv(gym.Env):
     metadata = {
         'render_modes': ['human', 'rgb_array'],
     }
-
+    
     PERCEPTION_DISTANCE = 5.0 * Vehicle.MAX_SPEED
     """The maximum distance of any vehicle present in the observation [m]"""
 
@@ -56,6 +62,14 @@ class AbstractEnv(gym.Env):
         self.observation_type = None
         self.observation_space = None
         self.define_spaces()
+    #=================================================================
+        # Safety Index
+        self.phi = None
+        self.sis_info = dict()
+        self.set_sis_paras(sigma=0.04, k=1, n=2)
+
+        self.world = None
+    #=================================================================
 
         # Running
         self.time = 0  # Simulation time
@@ -68,7 +82,7 @@ class AbstractEnv(gym.Env):
         self.rendering_mode = 'human'
         self.enable_auto_render = False
 
-        self.reset()
+        self.reset() # wichtige funktion!!!
 
     @property
     def vehicle(self) -> Vehicle:
@@ -80,8 +94,35 @@ class AbstractEnv(gym.Env):
         """Set a unique controlled vehicle."""
         self.controlled_vehicles = [vehicle]
 
+    #=================================================================
+    # @property
+    # def sim(self):
+    #     ''' Helper to get the world's simulation instance '''
+    #     return self.world.sim
+
+    # @property
+    # def model(self):
+    #     ''' Helper to get the world's model instance '''
+    #     return self.sim.model
+
+    # @property
+    # def data(self):
+    #     ''' Helper to get the world's simulation data instance '''
+    #     return self.sim.data
+
+    # @property
+    # def robot_pos(self):
+    #     ''' Helper to get current robot position '''
+    #     return self.data.get_body_xpos('robot').copy()
+
+    # @property
+    # def other_vehicles_pos(self):
+    #     ''' Helper to get the vehicles positions from layout '''
+    #     return [self.data.get_body_xpos(f'hazard{i}').copy() for i in range(self.hazards_num)]
+    #=================================================================
+
     @classmethod
-    def default_config(cls) -> dict:
+    def default_config_abstract(cls) -> dict:
         """
         Default environment configuration.
 
@@ -109,6 +150,50 @@ class AbstractEnv(gym.Env):
             "real_time_rendering": False
         }
 
+    #=================================================================
+    def set_sis_paras(self, sigma, k, n):
+        # safety index parameter setzen
+        self.sis_para_k = k
+        self.sis_para_sigma = sigma
+        self.sis_para_n = n
+
+    # def adaptive_safety_index(self):
+    #     # initialize safety index
+    #     phi = -1e8
+    #     sis_info_t = self.sis_info.get('sis_data', []) # sis_info zum Zeitpunkt t; leer zum Zeitpunkt t=0
+    #     sis_info_tp1 = [] # sis_info zum Zeitpunkt t+1
+    #     # counter for vehicle index
+    #     cnt = -1
+
+    #     # iterate the vehicles to compute the maximum safety index and give back phi and the vahicle index of highest phi
+    #     for h_pos in self.other_vehicles_pos:
+    #         cnt += 1
+    #         # get the state
+    #         # d = h_dist
+    #         h_dist = self.dist_xy(h_pos)
+    #         d = h_dist
+
+    #         # dot d = velocity
+    #         vel_vec = self.data.get_body_xvelp('robot')[0:2]
+    #         robot_pos = self.world.robot_pos()
+    #         robot_to_hazard_direction = (h_pos - robot_pos)[0:2]
+    #         dotd = -np.dot(vel_vec, robot_to_hazard_direction) / np.linalg.norm(robot_to_hazard_direction)
+    #         # if dotd <0, then we are getting closer to hazard
+    #         sis_info_tp1.append((d, dotd))
+
+    #         # compute the safety index
+    #         phi_tmp = self.sis_para_sigma + self.vehicle_size ** self.sis_para_n \
+    #             - d ** self.sis_para_n - self.sis_para_k * dotd
+    #         # select the largest safety index
+    #         if phi_tmp > phi:
+    #             phi = phi_tmp
+    #             index = cnt
+
+    #     self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
+    #     return phi, index
+        
+    #=================================================================
+
     def seed(self, seed: int = None) -> List[int]:
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
@@ -126,7 +211,7 @@ class AbstractEnv(gym.Env):
         """
         Set the types and spaces of observation and action from config.
         """
-        self.observation_type = observation_factory(self, self.config["observation"])
+        self.observation_type = observation_factory(self, self.config["observation"]) # zb observation_typ = class KinematicObservation
         self.action_type = action_factory(self, self.config["action"])
         self.observation_space = self.observation_type.space()
         self.action_space = self.action_type.space()
@@ -156,11 +241,30 @@ class AbstractEnv(gym.Env):
         :param action: current action
         :return: info dict
         """
+ 	
+        # info dict
         info = {
             "speed": self.vehicle.speed,
             "crashed": self.vehicle.crashed,
             "action": action,
         }
+
+        #=================================================================
+        #sis
+        # old_phi = self.phi
+        # self.phi, veh_index = self.adaptive_safety_index()
+        # if old_phi <= 0:
+        #     delta_phi = max(self.phi, 0)
+        # else:
+        #     delta_phi = self.phi - old_phi
+
+        # # update info dict
+        # info.update({'delta_phi': delta_phi})
+        # info.update({'phi': self.phi})
+        # info.update(self.sis_info)
+        # info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Saftey Index
+        #=================================================================
+
         try:
             info["cost"] = self._cost(action)
         except NotImplementedError:
@@ -187,7 +291,10 @@ class AbstractEnv(gym.Env):
         self.define_spaces()  # First, to set the controlled vehicle class depending on action space
         self.time = self.steps = 0
         self.done = False
-        self._reset()
+        # sis
+        # self.phi = self.adaptive_safety_index()[0]
+
+        self._reset() # in subclass definiert: hier werden road und vehicles gesetzt
         self.define_spaces()  # Second, to link the obs and actions to the vehicles once the scene is created
         return self.observation_type.observe()
 

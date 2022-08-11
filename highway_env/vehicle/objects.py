@@ -155,7 +155,7 @@ class RoadObject(ABC):
 
         :param other: the other object
         :param lane: a lane
-        :return: the distance to the other other [m]
+        :return: the x-distance to the other other [m]
         """
         if not other:
             return np.nan

@@ -21,7 +21,7 @@ class TwoWayEnv(AbstractEnv):
 
     @classmethod
     def default_config(cls) -> dict:
-        config = super().default_config()
+        config = super().default_config_abstract()
         config.update({
             "observation": {
                 "type": "TimeToCollision",

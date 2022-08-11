@@ -1,3 +1,12 @@
+'''
+Aenderungen:
+- default_config: 
+    - "action": {"type": "ContinuousAction"} (vorher: "DiscreteMetaAction")
+    - "offroad_terminal": True (vorher: False)
+-
+-
+'''
+
 import numpy as np
 from gym.envs.registration import register
 
@@ -9,7 +18,9 @@ from highway_env.utils import near_split
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 
-
+#==================================================#
+#                   HighwayEnv                     #
+#==================================================#
 class HighwayEnv(AbstractEnv):
     """
     A highway driving environment.
@@ -20,31 +31,32 @@ class HighwayEnv(AbstractEnv):
 
     @classmethod
     def default_config(cls) -> dict:
-        config = super().default_config()
+        config = super().default_config_abstract()
         config.update({
             "observation": {
-                "type": "Kinematics"
+                "type": "Kinematics",  # types aus 'highway_env.envs.common.observation'
+                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                "vehicles_count": 5,   # Number of observed vehicles
             },
             "action": {
-                "type": "DiscreteMetaAction",
+                "type": "ContinuousAction",
             },
-            "lanes_count": 4,
-            "vehicles_count": 50,
-            "controlled_vehicles": 1,
-            "initial_lane_id": None,
-            "duration": 40,  # [s]
-            "ego_spacing": 2,
-            "vehicles_density": 1,
+            "lanes_count": 4,          # Anzahl Spuren
+            "vehicles_count": 20,      # Anzahl Fahrzeuge, die in der Welt erzeugt werden
+            "controlled_vehicles": 1,  # Anzahl der zu steuernden vehicles (1 ist standard)
+            "initial_lane_id": None,   # zufaellige initiale Spur für zu steuerndes vehicle
+            "duration": 40,            # [s]
+            "ego_spacing": 2,          # mind. Abstand zu ego-vehicle
+            "vehicles_density": 1,     # ?
             "collision_reward": -1,    # The reward received when colliding with a vehicle.
-            "right_lane_reward": 0.1,  # The reward received when driving on the right-most lanes, linearly mapped to
-                                       # zero for other lanes.
-            "high_speed_reward": 0.4,  # The reward received when driving at full speed, linearly mapped to zero for
-                                       # lower speeds according to config["reward_speed_range"].
+            "right_lane_reward": 0.1,  # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
+            "high_speed_reward": 0.4,  # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
             "lane_change_reward": 0,   # The reward received at each lane change action.
-            "reward_speed_range": [20, 30],
-            "offroad_terminal": False
+            "reward_speed_range": [20, 30], # nur in diesem Bereich gibt es reward fuer Geschwindigkeit
+            "offroad_terminal": True   # definiert ob Durchlauf auch mit Verlassen des Fahrzeugs von der Strasse endet; default: False
         })
         return config
+
 
     def _reset(self) -> None:
         self._create_road()
@@ -96,7 +108,7 @@ class HighwayEnv(AbstractEnv):
         reward = utils.lmap(reward,
                           [self.config["collision_reward"],
                            self.config["high_speed_reward"] + self.config["right_lane_reward"]],
-                          [0, 1])
+                          [0, 1]) # normalisiert reward auf dem Intervall [0,1]
         reward = 0 if not self.vehicle.on_road else reward
         return reward
 
@@ -110,7 +122,12 @@ class HighwayEnv(AbstractEnv):
         """The cost signal is the occurrence of collision."""
         return float(self.vehicle.crashed)
 
+     
 
+
+#==================================================#
+#                HighwayEnv Fast                   #
+#==================================================#
 class HighwayEnvFast(HighwayEnv):
     """
     A variant of highway-v0 with faster execution:

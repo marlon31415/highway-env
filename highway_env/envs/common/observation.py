@@ -204,10 +204,11 @@ class KinematicObservation(ObservationType):
             return np.zeros(self.space().shape)
 
         # Add ego-vehicle
+        # erstellt erste Zeile von Dataframe mit features als Spaltennamen und den dazugehoerigen Daten aus observer_vehicle
         df = pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features]
         # Add nearby traffic
         close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
-                                                         self.env.PERCEPTION_DISTANCE,
+                                                         self.env.PERCEPTION_DISTANCE, # 5*max_speed = 200m
                                                          count=self.vehicles_count - 1,
                                                          see_behind=self.see_behind,
                                                          sort=self.order == "sorted")

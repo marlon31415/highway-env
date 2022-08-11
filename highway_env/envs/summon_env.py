@@ -22,7 +22,7 @@ class SummonEnv(ParkingEnv):
 
     @classmethod
     def default_config(cls) -> dict:
-        config = super().default_config()
+        config = super().default_config_abstract()
         config.update({
             "vehicles_count": 10,
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",

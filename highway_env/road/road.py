@@ -236,7 +236,7 @@ class RoadNetwork(object):
     def position_heading_along_route(self, route: Route, longitudinal: float, lateral: float) \
             -> Tuple[np.ndarray, float]:
         """
-        Get the absolute position and heading along a route composed of several lanes at some local coordinates.
+        Get the absolute position and heading along a route composed of several lanes at some local coordinates. 
 
         :param route: a planned route, list of lane indexes
         :param longitudinal: longitudinal position
@@ -305,12 +305,13 @@ class Road(object):
         self.np_random = np_random if np_random else np.random.RandomState()
         self.record_history = record_history
 
+    # gibt (sortierte) Liste mit den Fahrzeugen, die dem zu steuernden am naechsten sind; Laenge der Liste durch vehicles_count definiert
     def close_vehicles_to(self, vehicle: 'kinematics.Vehicle', distance: float, count: Optional[int] = None,
                           see_behind: bool = True, sort: bool = True) -> object:
         vehicles = [v for v in self.vehicles
                     if np.linalg.norm(v.position - vehicle.position) < distance
                     and v is not vehicle
-                    and (see_behind or -2 * vehicle.LENGTH < vehicle.lane_distance_to(v))]
+                    and (see_behind or -2 * vehicle.LENGTH < vehicle.lane_distance_to(v))] # nur fahrzeuge, die nicht weiter als 10[m] hinter zu steuerndem fahrzeug sind (falls see_behind=False)
 
         if sort:
             vehicles = sorted(vehicles, key=lambda v: abs(vehicle.lane_distance_to(v)))
