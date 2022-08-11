@@ -40,7 +40,7 @@ class HighwayEnv(AbstractEnv):
             "observation": {
                 "type": "Kinematics",  # types aus 'highway_env.envs.common.observation'
                 "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
-                "vehicles_count": 5,   # Number of observed vehicles
+                "vehicles_count": 8,   # Number of observed vehicles 
             },
             "action": {
                 "type": "ContinuousAction",
@@ -57,7 +57,8 @@ class HighwayEnv(AbstractEnv):
             "high_speed_reward": 0.4,  # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
             "lane_change_reward": 0,   # The reward received at each lane change action.
             "reward_speed_range": [20, 30], # nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "offroad_terminal": True   # definiert ob Durchlauf auch mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "offroad_terminal": True,  # definiert ob Durchlauf auch mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "absolut": False,          # Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
         })
         return config
 

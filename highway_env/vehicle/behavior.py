@@ -13,7 +13,7 @@ class IDMVehicle(ControlledVehicle):
     """
     A vehicle using both a longitudinal and a lateral decision policies.
 
-    - Longitudinal: the IDM model computes an acceleration given the preceding vehicle's distance and speed.
+    - Longitudinal: the IDM (Intelligent driver model) computes an acceleration given the preceding vehicle's distance and speed.
     - Lateral: the MOBIL model decides when to change lane by maximizing the acceleration of nearby vehicles.
     """
 

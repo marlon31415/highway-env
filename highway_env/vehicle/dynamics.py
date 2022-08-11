@@ -181,7 +181,9 @@ class BicycleVehicle(Vehicle):
         A = A0 + np.tensordot(self.theta, phi, axes=[0, 0])
         return A, B
 
-
+'''
+in simulate() funktion ist ein unresolved import!
+'''
 def simulate(dt: float = 0.1) -> None:
     import control
     time = np.arange(0, 20, dt)

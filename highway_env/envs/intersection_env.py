@@ -252,7 +252,7 @@ class IntersectionEnv(AbstractEnv):
 class MultiAgentIntersectionEnv(IntersectionEnv):
     @classmethod
     def default_config(cls) -> dict:
-        config = super().default_config()
+        config = super().default_config_abstract()
         config.update({
             "action": {
                  "type": "MultiAgentAction",

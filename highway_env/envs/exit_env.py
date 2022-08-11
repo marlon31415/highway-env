@@ -139,7 +139,7 @@ class ExitEnv(HighwayEnv):
 # class DenseLidarExitEnv(DenseExitEnv):
 #     @classmethod
 #     def default_config(cls) -> dict:
-#         return dict(super().default_config(),
+#         return dict(super().default_config_abstract(),
 #                     observation=dict(type="LidarObservation"))
 
 

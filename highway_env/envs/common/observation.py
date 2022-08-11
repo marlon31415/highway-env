@@ -194,8 +194,12 @@ class KinematicObservation(ObservationType):
             }
         for feature, f_range in self.features_range.items():
             if feature in df:
+                # Werte auf Intervall [-1,1] normalisieren;
+                # falls feature ausserhalb von [f_range[0],f_range[1]] liegt, koennen Werte auch ausserhalb von [-1, 1] liegen 
                 df[feature] = utils.lmap(df[feature], [f_range[0], f_range[1]], [-1, 1])
                 if self.clip:
+                    # normalisierte Werte kleiner -1 und groesser 1 abschneiden
+                    # (falls Werte ausserhalb von Intervall [f_range[0],f_range[1]] lagen)
                     df[feature] = np.clip(df[feature], -1, 1)
         return df
 
@@ -207,6 +211,7 @@ class KinematicObservation(ObservationType):
         # erstellt erste Zeile von Dataframe mit features als Spaltennamen und den dazugehoerigen Daten aus observer_vehicle
         df = pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features]
         # Add nearby traffic
+        # liste aus den Fahrzeugen, die dem ego-vehicle am naechsten sind
         close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
                                                          self.env.PERCEPTION_DISTANCE, # 5*max_speed = 200m
                                                          count=self.vehicles_count - 1,
@@ -221,17 +226,17 @@ class KinematicObservation(ObservationType):
         # Normalize and clip
         if self.normalize:
             df = self.normalize_obs(df)
-        # Fill missing rows
+        # Fill missing rows with zeros
         if df.shape[0] < self.vehicles_count:
             rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
             df = pd.concat([df, pd.DataFrame(data=rows, columns=self.features)], ignore_index=True)
         # Reorder
         df = df[self.features]
-        obs = df.values.copy()
+        obs = df.values.copy() # .values gibt array zurueck
         if self.order == "shuffled":
             self.env.np_random.shuffle(obs[1:])
         # Flatten
-        return obs.astype(self.space().dtype)
+        return obs.astype(self.space().dtype) # in Datentyp des Observation_space umwandeln
 
 
 class OccupancyGridObservation(ObservationType):
