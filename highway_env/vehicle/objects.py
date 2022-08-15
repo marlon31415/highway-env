@@ -128,6 +128,10 @@ class RoadObject(ABC):
 
     @property
     def direction(self) -> np.ndarray:
+        """
+        tatsaechliche Ausrichtung des Objekts; fuer Richtung der Geschwindigkeit 
+        muss noch Schwimmwinkel beta betrachet werden
+        """
         return np.array([np.cos(self.heading), np.sin(self.heading)])
 
     @property

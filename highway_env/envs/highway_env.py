@@ -46,11 +46,11 @@ class HighwayEnv(AbstractEnv):
                 "type": "ContinuousAction",
             },
             "lanes_count": 4,          # Anzahl Spuren
-            "vehicles_count": 20,      # Anzahl Fahrzeuge, die in der Welt erzeugt werden
+            "vehicles_count": 20,      # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,  # Anzahl der zu steuernden vehicles (1 ist standard)
-            "initial_lane_id": None,   # zufaellige initiale Spur für zu steuerndes vehicle
+            "initial_lane_id": None,   # zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration": 40,            # [s]
-            "ego_spacing": 2,          # mind. Abstand zu ego-vehicle
+            "ego_spacing": 2,          # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
             "vehicles_density": 1,     # ?
             "collision_reward": -1,    # The reward received when colliding with a vehicle.
             "right_lane_reward": 0.1,  # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
@@ -64,35 +64,47 @@ class HighwayEnv(AbstractEnv):
 
 
     def _reset(self) -> None:
+        """erzeugt die Road auf der Autos platziert werden und die Autos selbst"""
         self._create_road()
         self._create_vehicles()
 
     def _create_road(self) -> None:
-        """Create a road composed of straight adjacent lanes."""
+        """Create a road composed of straight adjacent lanes without vehicles"""
         self.road = Road(network=RoadNetwork.straight_road_network(self.config["lanes_count"], speed_limit=30),
                          np_random=self.np_random, record_history=self.config["show_trajectories"])
 
     def _create_vehicles(self) -> None:
-        """Create some new random vehicles of a given type, and add them on the road."""
+        """Create some new random vehicles of a given type, and add them on the road"""
+        # definieren von welchen Typ die anderen Fahrzeuge sein sollen
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        # Funktion wichtig, wenn config["controlled_vehicles"] > 1 -> Liste mit so vielen Eintraegen wie num_bins und jeder Eintrag ca. gleich groß.
+        # wenn num_bins gegeben (und =1 =nur ein "controlled_vehicle") dann ist Ergebnis von near_split eine Liste = ["vehicles_count"]
         other_per_controlled = near_split(self.config["vehicles_count"], num_bins=self.config["controlled_vehicles"])
 
+        # Wird Liste der Laenge config["controlled_vehicles"] mit einem ego-vehicle in jedem Eintrag.
+        # Enthaelt nur ein ego-vehicle wenn config["controlled_vehicles"]=1 
         self.controlled_vehicles = []
+
+        # for-for-Schleife erzeugt fuer jedes ego-vehicle eine entsprechende Anzahl an fremden Verkehrsteilnehmern (ca. gleich aufgeteilt)
         for others in other_per_controlled:
+            """erzeugt Liste mit ego-vehicles und setzt diese auf die Road"""
+            # zufaellige Daten zum erzeugen des vehicles
             vehicle = Vehicle.create_random(
                 self.road,
                 speed=25,
                 lane_id=self.config["initial_lane_id"],
                 spacing=self.config["ego_spacing"]
             )
+            # vehicle class wird mit vorher generierten Daten aufgerufen -> es wird vehicle erzeugt
             vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed)
             self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle)
+            self.road.vehicles.append(vehicle) # vehicles-liste in Road-klasse
 
             for _ in range(others):
+                """erzeugt andere Verkehrsteilnehmer mit Methode create_random() von class Vehicle(RoadObject)"""
                 vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
                 vehicle.randomize_behavior()
-                self.road.vehicles.append(vehicle)
+                self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab indize 1)
 
     def _reward(self, action: Action) -> float:
         """
