@@ -67,8 +67,6 @@ class AbstractEnv(gym.Env):
         self.phi = None
         self.sis_info = dict()
         self.set_sis_paras(sigma=0.04, k=1, n=2)
-
-        self.world = None
     #=================================================================
 
         # Running
@@ -95,26 +93,6 @@ class AbstractEnv(gym.Env):
         self.controlled_vehicles = [vehicle]
 
     #=================================================================
-    # @property
-    # def sim(self):
-    #     ''' Helper to get the world's simulation instance '''
-    #     return self.world.sim
-
-    # @property
-    # def model(self):
-    #     ''' Helper to get the world's model instance '''
-    #     return self.sim.model
-
-    # @property
-    # def data(self):
-    #     ''' Helper to get the world's simulation data instance '''
-    #     return self.sim.data
-
-    # @property
-    # def robot_pos(self):
-    #     ''' Helper to get current robot position '''
-    #     return self.data.get_body_xpos('robot').copy()
-
     # @property
     # def other_vehicles_pos(self):
     #     ''' Helper to get the vehicles positions from layout '''
@@ -157,40 +135,55 @@ class AbstractEnv(gym.Env):
         self.sis_para_sigma = sigma
         self.sis_para_n = n
 
-    # def adaptive_safety_index(self):
-    #     # initialize safety index
-    #     phi = -1e8
-    #     sis_info_t = self.sis_info.get('sis_data', []) # sis_info zum Zeitpunkt t; leer zum Zeitpunkt t=0
-    #     sis_info_tp1 = [] # sis_info zum Zeitpunkt t+1
-    #     # counter for vehicle index
-    #     cnt = -1
+    def adaptive_safety_index(self):
+        # initialize safety index
+        phi = -1e8
+        sis_info_t = self.sis_info.get('sis_data', []) # sis_info zum Zeitpunkt t; leer zum Zeitpunkt t=0
+        sis_info_tp1 = [] # sis_info zum Zeitpunkt t+1
+        # counter for vehicle index
+        cnt = -1
 
-    #     # iterate the vehicles to compute the maximum safety index and give back phi and the vahicle index of highest phi
-    #     for h_pos in self.other_vehicles_pos:
-    #         cnt += 1
-    #         # get the state
-    #         # d = h_dist
-    #         h_dist = self.dist_xy(h_pos)
-    #         d = h_dist
+        # get data of the ego-vehicle
+        ego_pos = self.vehicle.position # postion of ego-vehicle
+        ego_vel = self.vehicle.velocity # velocity of ego-vehicle: [v_x, v_y]
+        ego_lane_index = self.vehicle.lane_index # lane_index of ego-vehicle
 
-    #         # dot d = velocity
-    #         vel_vec = self.data.get_body_xvelp('robot')[0:2]
-    #         robot_pos = self.world.robot_pos()
-    #         robot_to_hazard_direction = (h_pos - robot_pos)[0:2]
-    #         dotd = -np.dot(vel_vec, robot_to_hazard_direction) / np.linalg.norm(robot_to_hazard_direction)
-    #         # if dotd <0, then we are getting closer to hazard
-    #         sis_info_tp1.append((d, dotd))
+        # iterate over the vehicles to compute the maximum safety index and give back phi 
+        # and the vehicle index of highest phi
+        for vehicle in self.road.vehicles[1:]:
+            cnt += 1
 
-    #         # compute the safety index
-    #         phi_tmp = self.sis_para_sigma + self.vehicle_size ** self.sis_para_n \
-    #             - d ** self.sis_para_n - self.sis_para_k * dotd
-    #         # select the largest safety index
-    #         if phi_tmp > phi:
-    #             phi = phi_tmp
-    #             index = cnt
+            # get data of other vehicle
+            veh_pos = vehicle.position # position of other vehicle
 
-    #     self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
-    #     return phi, index
+            # d = distance
+            ego_to_vehicle_direction = (veh_pos - ego_pos)
+            ego_to_vehicle_distance = np.linalg.norm(ego_to_vehicle_direction) # distance from ego-vehicle to vehicle
+            d = ego_to_vehicle_distance # parameter d from Safety Index; always positive
+
+            # dot d = velocity
+            # berechnen, mit welcher Geschwindigkeit ego-vehicle auf vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird
+            # Skalarprodukt (np.dot) berechnet den Anteil der Geschwindigkeit der auf anderes vehicle gerichtet ist 
+            # und Division normiert diesen Anteil auf den Abstand zum anderen vehicle
+            dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / ego_to_vehicle_distance
+            # if dotd <0, then we are getting closer to hazard
+            sis_info_tp1.append((d, dotd))
+
+            # compute the safety index for specific vehicle
+            ''' Mindestabstand d_min zwischen Fahrzeugen abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht '''
+            if  ego_lane_index == vehicle.lane_index:
+                d_min = self.vehicle.LENGTH * 1.1
+            else:
+                d_min = self.vehicle.WIDTH * 1.1           
+            ''' phi = sigma + d_min^n - d^n - k*dotd '''
+            phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
+            # select the largest safety index
+            if phi_tmp > phi:
+                phi = phi_tmp
+                index = cnt
+
+        self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
+        return phi, index
         
     #=================================================================
 
@@ -250,25 +243,26 @@ class AbstractEnv(gym.Env):
         }
 
         #=================================================================
-        #sis
-        # old_phi = self.phi
-        # self.phi, veh_index = self.adaptive_safety_index()
-        # if old_phi <= 0:
-        #     delta_phi = max(self.phi, 0)
-        # else:
-        #     delta_phi = self.phi - old_phi
+        # sis
+        old_phi = self.phi
+        self.phi, veh_index = self.adaptive_safety_index()
+        if old_phi <= 0:
+            delta_phi = max(self.phi, 0)
+        else:
+            delta_phi = self.phi - old_phi
 
-        # # update info dict
-        # info.update({'delta_phi': delta_phi})
-        # info.update({'phi': self.phi})
-        # info.update(self.sis_info)
-        # info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Saftey Index
+        # update info dict
+        info.update({'delta_phi': delta_phi})
+        info.update({'phi': self.phi})
+        info.update(self.sis_info)
+        info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Saftey Index
         #=================================================================
 
         try:
             info["cost"] = self._cost(action)
         except NotImplementedError:
             pass
+
         return info
 
     def _cost(self, action: Action) -> float:
@@ -291,11 +285,13 @@ class AbstractEnv(gym.Env):
         self.define_spaces()  # First, to set the controlled vehicle class depending on action space
         self.time = self.steps = 0
         self.done = False
-        # sis
-        # self.phi = self.adaptive_safety_index()[0]
 
         self._reset() # in subclass definiert: hier werden road und vehicles gesetzt
-        self.define_spaces()  # Second, to link the obs and actions to the vehicles once the scene is created
+        self.define_spaces() # Second, to link the obs and actions to the vehicles once the scene is created
+
+        # sis
+        self.phi = self.adaptive_safety_index()[0] # nach self._reset() einbinden
+
         return self.observation_type.observe()
 
     def _reset(self) -> None:
@@ -330,17 +326,21 @@ class AbstractEnv(gym.Env):
         return obs, reward, terminal, info
 
     def _simulate(self, action: Optional[Action] = None) -> None:
-        """Perform several steps of simulation with constant action."""
+        """
+        Perform several steps of simulation with constant action.
+        road.step() in frequency of "simulation_frequency"; new action in frequency of "policy_frequency"
+        -> in every step the constant action is simulated until a new action comes in 
+        """
         frames = int(self.config["simulation_frequency"] // self.config["policy_frequency"])
         for frame in range(frames):
-            # Forward action to the vehicle
+            # Forward action to the vehicle if
             if action is not None \
                     and not self.config["manual_control"] \
                     and self.steps % int(self.config["simulation_frequency"] // self.config["policy_frequency"]) == 0:
                 self.action_type.act(action)
 
             self.road.act()
-            self.road.step(1 / self.config["simulation_frequency"])
+            self.road.step(1 / self.config["simulation_frequency"]) # step(dt)
             self.steps += 1
 
             # Automatically render intermediate simulation steps if a viewer has been launched

@@ -30,6 +30,10 @@ class Vehicle(RoadObject):
     """ Minimum reachable speed [m/s] """
     HISTORY_SIZE = 30
     """ Length of the vehicle state history, for trajectory display"""
+    CG_REAR = LENGTH/2
+    """Distance from Center of Gravity (CG) to Rear Axle"""
+    CG_FRONT = LENGTH/2
+    """Distance from Center of Gravity (CG) to Front Axle"""
 
     def __init__(self,
                  road: Road,
@@ -38,10 +42,11 @@ class Vehicle(RoadObject):
                  speed: float = 0,
                  predition_type: str = 'constant_steering'):
         super().__init__(road, position, heading, speed)
+        self.beta = 0 # Schwimmwinkel bei Initialisierung zu Null setzen
         self.prediction_type = predition_type
         self.action = {'steering': 0, 'acceleration': 0}
-        self.crashed = False
-        self.impact = None
+        self.crashed = False # definiert ob vehicle anderes Objekt beruehrt
+        self.impact = None   # definiert ob
         self.log = []
         self.history = deque(maxlen=self.HISTORY_SIZE)
 
@@ -106,6 +111,9 @@ class Vehicle(RoadObject):
         if action:
             self.action = action
 
+    #===========================================================#
+    #       Implementierung des Bicycle Modells                 #
+    #===========================================================#
     def step(self, dt: float) -> None:
         """
         Propagate the vehicle state given its actions.
@@ -116,18 +124,26 @@ class Vehicle(RoadObject):
 
         :param dt: timestep of integration of the model [s]
         """
-        self.clip_actions()
-        delta_f = self.action['steering']
-        beta = np.arctan(1 / 2 * np.tan(delta_f))
-        v = self.speed * np.array([np.cos(self.heading + beta),
-                                   np.sin(self.heading + beta)])
+        self.clip_actions() # falls Randbedingungen verletzt wurden oder crash
+        # Lenkwinkel (input)
+        delta_f = self.action['steering'] # Wert ist schon im Bereich STEERING_RANGE [rad] (vgl. ContinuousAction(ActionType))
+        # Schwimmwinkel
+        self.beta = np.arctan(self.CG_REAR / self.LENGTH * np.tan(delta_f))
+        # Geschwindigkeit in x- und y-Richtung
+        v = self.speed * np.array([np.cos(self.heading + self.beta),
+                                   np.sin(self.heading + self.beta)])
+        # Integration der Geschwindigkeit fuer Position
         self.position += v * dt
+        # falls impact
         if self.impact is not None:
             self.position += self.impact
             self.crashed = True
             self.impact = None
-        self.heading += self.speed * np.sin(beta) / (self.LENGTH / 2) * dt
-        self.speed += self.action['acceleration'] * dt
+        # Gierwinkel
+        self.heading += (self.speed / self.CG_REAR) * np.sin(self.beta)  * dt
+        # absolute Geschwindigkeit
+        self.speed += self.action['acceleration'] * dt # Wert ist schon im Bereich ACCELERATION_RANGE [m/s^2] (vgl. class ContinuousAction(ActionType))
+        # on_state_update 
         self.on_state_update()
 
     def clip_actions(self) -> None:
@@ -154,7 +170,7 @@ class Vehicle(RoadObject):
         elif self.prediction_type == 'constant_steering':
             action = {'acceleration': 0.0, 'steering': self.action['steering']}
         else:
-            raise ValueError("Unknown predition type")
+            raise ValueError("Unknown prediction type")
 
         dt = np.diff(np.concatenate(([0.0], times)))
 
@@ -169,8 +185,12 @@ class Vehicle(RoadObject):
         return (positions, headings)
 
     @property
+    def v_direction(self) -> np.ndarray:
+        return np.array([np.cos(self.heading + self.beta), np.sin(self.heading + self.beta)])
+
+    @property
     def velocity(self) -> np.ndarray:
-        return self.speed * self.direction  # TODO: slip angle beta should be used here
+        return self.speed * self.v_direction  # TODO: slip angle beta should be used here: UPDATE beta verwendet (15.08.2022)
 
     @property
     def destination(self) -> np.ndarray:
@@ -206,8 +226,8 @@ class Vehicle(RoadObject):
             'vx': self.velocity[0],
             'vy': self.velocity[1],
             'heading': self.heading,
-            'cos_h': self.direction[0],
-            'sin_h': self.direction[1],
+            'cos_h': self.direction[0], # tatsaechliche x-Ausrichtung des vehicles (nicht Ausrichtung der Geschwindigkeit)
+            'sin_h': self.direction[1], # tatsaechliche y-Ausrichtung des vehicles (nicht Ausrichtung der Geschwindigkeit)
             'cos_d': self.destination_direction[0],
             'sin_d': self.destination_direction[1],
             'long_off': self.lane_offset[0],
