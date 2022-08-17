@@ -25,7 +25,6 @@ Observation = np.ndarray
 #=================================================================
 
 class AbstractEnv(gym.Env):
-
     """
     A generic environment for various tasks involving a vehicle driving on a road.
 
@@ -33,6 +32,7 @@ class AbstractEnv(gym.Env):
     speed. The action space is fixed, but the observation space and reward function must be defined in the
     environment implementations.
     """
+    
     observation_type: ObservationType
     action_type: ActionType
     _record_video_wrapper: Optional[RecordVideo]
@@ -62,11 +62,12 @@ class AbstractEnv(gym.Env):
         self.observation_type = None
         self.observation_space = None
         self.define_spaces()
+
     #=================================================================
         # Safety Index
         self.phi = None
         self.sis_info = dict()
-        self.set_sis_paras(sigma=0.04, k=1, n=2)
+        self.set_sis_paras(sigma=0.3, k=1, n=1) # Initialwerte wie bei SIS-Paper
     #=================================================================
 
         # Running
@@ -91,13 +92,6 @@ class AbstractEnv(gym.Env):
     def vehicle(self, vehicle: Vehicle) -> None:
         """Set a unique controlled vehicle."""
         self.controlled_vehicles = [vehicle]
-
-    #=================================================================
-    # @property
-    # def other_vehicles_pos(self):
-    #     ''' Helper to get the vehicles positions from layout '''
-    #     return [self.data.get_body_xpos(f'hazard{i}').copy() for i in range(self.hazards_num)]
-    #=================================================================
 
     @classmethod
     def default_config_abstract(cls) -> dict:
@@ -130,27 +124,37 @@ class AbstractEnv(gym.Env):
 
     #=================================================================
     def set_sis_paras(self, sigma, k, n):
-        # safety index parameter setzen
+        """safety Index Parameter setzen"""
         self.sis_para_k = k
         self.sis_para_sigma = sigma
         self.sis_para_n = n
 
     def adaptive_safety_index(self):
+        """
+        Safety Index berechnen: (safety index ist aktuell auf Umgebung highway_env ausgelegt)
+        Der Safety Index betrachtet andere Fahrzeuge und Fahrbahnrand mit kleinstem lateralem Abstand zu Fahrzeugmitte
+        """
         # initialize safety index
         phi = -1e8
         sis_info_t = self.sis_info.get('sis_data', []) # sis_info zum Zeitpunkt t; leer zum Zeitpunkt t=0
         sis_info_tp1 = [] # sis_info zum Zeitpunkt t+1
         # counter for vehicle index
-        cnt = -1
+        cnt = 0 # Erklaerung: cnt = 1 -> vehicle mit Index 1 in Liste self.road.vehicles (erstes nicht ego-vehicle Fahrzeug) 
 
         # get data of the ego-vehicle
         ego_pos = self.vehicle.position # postion of ego-vehicle
         ego_vel = self.vehicle.velocity # velocity of ego-vehicle: [v_x, v_y]
-        ego_lane_index = self.vehicle.lane_index # lane_index of ego-vehicle
+        ego_lane_index = self.vehicle.lane_index # lane_index of ego-vehicle (_from, _to, _id)
+        ego_lane_index_id = self.vehicle.lane_index[2] # lane id of the lane where ego-vehicle is driving
+        ego_width = self.vehicle.WIDTH
+        ego_length = self.vehicle.LENGTH
 
-        # iterate over the vehicles to compute the maximum safety index and give back phi 
-        # and the vehicle index of highest phi
-        for vehicle in self.road.vehicles[1:]:
+        for vehicle in self.road.vehicles[1:]: # self.road.vehicles ist Liste mit allen erzeugten Fahzeugen; erster Listeneintrag ist ego-vehicle
+            """
+            Safety Index zu anderen Fahrzeugen berechnen:
+            iterate over the vehicles to compute the maximum safety index and give back phi
+            and the vehicle index of highest phi
+            """
             cnt += 1
 
             # get data of other vehicle
@@ -170,17 +174,53 @@ class AbstractEnv(gym.Env):
             sis_info_tp1.append((d, dotd))
 
             # compute the safety index for specific vehicle
-            ''' Mindestabstand d_min zwischen Fahrzeugen abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht '''
-            if  ego_lane_index == vehicle.lane_index:
-                d_min = self.vehicle.LENGTH * 1.1
+            if  ego_lane_index == vehicle.lane_index: # gilt nur wenn Fahrzeuge auf selber lane (nicht gegeben wenn ego-vehicle z.b. in Kreisverkehr faehrt)
+                ''' Mindestabstand d_min zwischen Fahrzeugen abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht und von Gierwinkel des ego-vehicles'''
+                d_min = ego_length * 1.1
             else:
-                d_min = self.vehicle.WIDTH * 1.1           
-            ''' phi = sigma + d_min^n - d^n - k*dotd '''
+                r = np.sqrt(ego_width**2 + ego_length**2) / 2 # Abstand von Fahrzeugmitte bis Ecke
+                theta_0 = np.arcsin((ego_width/2) / r) # Winkel zwischen Fahrzeuglaengsachse und Ecke
+                theta = abs(self.vehicle.heading - self.vehicle.lane.heading_at(self.vehicle.lane_offset[0])) # zusaetzlicher Drehwinkel des Fahrzeugs abzueglich der Strassenkruemmung
+                d_min = (np.sin(theta_0 + theta) * r + ego_width/2)* 1.1 # Abstand den ego-vehicle aufgrund von Gieren braucht + halbe Breite des anderen Fahrzeugs
+
             phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
+            ''' phi = sigma + d_min^n - d^n - k*dotd '''
+
             # select the largest safety index
             if phi_tmp > phi:
                 phi = phi_tmp
                 index = cnt
+
+        if ego_lane_index_id == 0 or ego_lane_index_id == len(self.vehicle.road.network.all_side_lanes(ego_lane_index))-1:
+            """
+            Safety Index zu Road Grenzen: berechnen falls ego-vehicle auf einer der aeusseren Lanes faehrt
+            """
+            cnt += 1 # wenn counter hoeher ist als Laenge der List self.road.vehicles dann ist Safety Index durch Fahrbahnrand definiert
+
+            # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
+            d_min = np.sin(theta_0 + theta) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
+
+            # Safety Lane Index
+            # d = distance (abhaengig davon ob ego-vehicle auf ganz linker oder rechter Spur ist)
+            if ego_lane_index_id == 0:
+                d = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] # parameter d from Safety Index; always positive
+                ego_to_vehicle_direction = np.array([0, -d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
+            else:
+                d = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1]
+                ego_to_vehicle_direction = np.array([0, d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke              
+            
+            # dot d = velocity            
+            dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / max(d, 0.001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+            sis_info_tp1.append((d, dotd))
+
+            phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
+            ''' phi = sigma + d_min^n - d^n - k*dotd '''
+
+            # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
+            if phi_tmp > phi:
+                phi = phi_tmp
+                index = cnt
+
 
         self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
         return phi, index
@@ -204,7 +244,7 @@ class AbstractEnv(gym.Env):
         """
         Set the types and spaces of observation and action from config.
         """
-        self.observation_type = observation_factory(self, self.config["observation"]) # zb observation_typ = class KinematicObservation
+        self.observation_type = observation_factory(self, self.config["observation"]) # zb observation_typ = class KinematicObservation; observation dict an Observation Klasse weitergegeben
         self.action_type = action_factory(self, self.config["action"])
         self.observation_space = self.observation_type.space()
         self.action_space = self.action_type.space()

@@ -33,8 +33,8 @@ class RoadObject(ABC):
         self.position = np.array(position, dtype=np.float64)
         self.heading = heading
         self.speed = speed
-        self.lane_index = self.road.network.get_closest_lane_index(self.position, self.heading) if self.road else np.nan
-        self.lane = self.road.network.get_lane(self.lane_index) if self.road else None
+        self.lane_index = self.road.network.get_closest_lane_index(self.position, self.heading) if self.road else np.nan # Ausgabetyp ist tuple(_from: str, _to: str, _id: int)
+        self.lane = self.road.network.get_lane(self.lane_index) if self.road else None # Ausgabetyp ist AbstractLane
 
         # Enable collision with other collidables
         self.collidable = True
@@ -129,8 +129,8 @@ class RoadObject(ABC):
     @property
     def direction(self) -> np.ndarray:
         """
-        tatsaechliche Ausrichtung des Objekts; fuer Richtung der Geschwindigkeit 
-        muss noch Schwimmwinkel beta betrachet werden
+        Gierwinkel: tatsaechliche Ausrichtung des Objekts; fuer Richtung 
+        der Geschwindigkeit muss noch Schwimmwinkel beta betrachet werden
         """
         return np.array([np.cos(self.heading), np.sin(self.heading)])
 

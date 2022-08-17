@@ -18,13 +18,12 @@ from highway_env.utils import near_split
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 
-#==================================================#
-#                   HighwayEnv                     #
-#==================================================#
 
 Observation = np.ndarray
 
-
+#==================================================#
+#                   HighwayEnv                     #
+#==================================================#
 class HighwayEnv(AbstractEnv):
     """
     A highway driving environment.
@@ -38,27 +37,30 @@ class HighwayEnv(AbstractEnv):
         config = super().default_config_abstract()
         config.update({
             "observation": {
-                "type": "Kinematics",  # types aus 'highway_env.envs.common.observation'
-                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
-                "vehicles_count": 8,   # Number of observed vehicles 
+                "type": "Kinematics",           # types aus 'highway_env.envs.common.observation'
+                "features": ["presence", "x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
+                "vehicles_count": 8,            # Number of observed vehicles
+                "observe_intentions": False,    # False = standard
+                "absolut": False,               # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
             },
             "action": {
                 "type": "ContinuousAction",
             },
-            "lanes_count": 4,          # Anzahl Spuren
-            "vehicles_count": 20,      # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
-            "controlled_vehicles": 1,  # Anzahl der zu steuernden vehicles (1 ist standard)
-            "initial_lane_id": None,   # zufaellige initiale Spur fuer zu steuerndes vehicle
-            "duration": 40,            # [s]
-            "ego_spacing": 2,          # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
-            "vehicles_density": 1,     # ?
-            "collision_reward": -1,    # The reward received when colliding with a vehicle.
-            "right_lane_reward": 0.1,  # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
-            "high_speed_reward": 0.4,  # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
-            "lane_change_reward": 0,   # The reward received at each lane change action.
-            "reward_speed_range": [20, 30], # nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "offroad_terminal": True,  # definiert ob Durchlauf auch mit Verlassen des Fahrzeugs von der Strasse endet; default: False
-            "absolut": False,          # Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
+            "lanes_count": 4,               # Anzahl Spuren
+            "vehicles_count": 20,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
+            "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
+            "initial_lane_id": None,        # zufaellige initiale Spur fuer zu steuerndes vehicle
+            "duration": 40,                 # [s]
+            "ego_spacing": 2,               # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
+            "vehicles_density": 1,          # ?
+            "collision_reward": 0,          # default=-1 ; The reward received when colliding with a vehicle.
+            "right_lane_reward": 0.3,       # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
+            "high_speed_reward": 0.4,       # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
+            "lane_change_reward": 0,        # The reward received at each lane change action.
+            "middle_of_lane_reward": 0.2,   # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
+            "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
+            "collision_terminal": True,     # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
+            "offroad_terminal": True,       # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
         })
         return config
 
@@ -112,32 +114,45 @@ class HighwayEnv(AbstractEnv):
         :param action: the last action performed
         :return: the corresponding reward
         """
+        # Liste aus allen Spuren auf der Road, die dieselben Indexe _from und _to haben: 
+        # [(_from, _to, _id: 0), (_from, _to, _id: 1), (_from, _to, _id: 2), ...]
         neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
+        # lane id der Spur des ego-vehicles; rechte Spur hat _id = config["lanes_count"]-1
         lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
             else self.vehicle.lane_index[2]
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
         forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
         scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
+        # Abstand zur Mitte bis zu welchem es noch reward gibt
+        lat_reward = 0.25  # wenn lat_reward veraendert wird muss Vorfaktor veraendert werden!!!
+
+        """reward berechnen"""
+        # collision reward
+        # + right lane reward: f(x) = 1 / (num_lanes-1)^2 * lane^2 -> diskrete Funktion; auf lane 0 immer Null und auf rechter lane (num_lanes-1) immer 1; dazwischen quadratisch
+        # + high speed reward: nur zwischen definiertem Bereich gibt es reward
+        # + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
         reward = \
             + self.config["collision_reward"] * self.vehicle.crashed \
-            + self.config["right_lane_reward"] * lane / max(len(neighbours) - 1, 1) \
-            + self.config["high_speed_reward"] * np.clip(scaled_speed, 0, 1)
+            + self.config["right_lane_reward"] * 1/max(len(neighbours) - 1, 1)**2 * lane**2\
+            + self.config["high_speed_reward"] * np.clip(scaled_speed, 0, 1) \
+            + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
+        # reward auf dem Intervall [0,1] normalisieren
         reward = utils.lmap(reward,
                           [self.config["collision_reward"],
-                           self.config["high_speed_reward"] + self.config["right_lane_reward"]],
-                          [0, 1]) # normalisiert reward auf dem Intervall [0,1]
+                           self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
+                          [0, 1]) 
         reward = 0 if not self.vehicle.on_road else reward
         return reward
 
     def _is_terminal(self) -> bool:
         """The episode is over if the ego vehicle crashed or the time is out."""
-        return self.vehicle.crashed or \
-            self.time >= self.config["duration"] or \
-            (self.config["offroad_terminal"] and not self.vehicle.on_road)
+        return self.time >= self.config["duration"] or \
+            (self.config["collision_terminal"] and self.vehicle.crashed) or \
+            (self.config["offroad_terminal"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
     def _cost(self, action: int) -> float:
-        """The cost signal is the occurrence of collision."""
-        return float(self.vehicle.crashed)
+        """The cost signal is the occurrence of unsafe states (collision and offroad)."""
+        return float(self.vehicle.crashed) + float(not self.vehicle.on_road)
 
      
 
@@ -230,6 +245,11 @@ class MOHighwayEnv(HighwayEnv):
         """
         return self._rewards(action)
 
+
+
+#==================================================#
+#                   register env                   #
+#==================================================#
 register(
     id='highway-v0',
     entry_point='highway_env.envs:HighwayEnv',

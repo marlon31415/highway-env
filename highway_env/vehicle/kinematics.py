@@ -112,7 +112,7 @@ class Vehicle(RoadObject):
             self.action = action
 
     #===========================================================#
-    #       Implementierung des Bicycle Modells                 #
+    #    Implementierung des kinematischen Bicycle Modells      #
     #===========================================================#
     def step(self, dt: float) -> None:
         """
@@ -225,13 +225,13 @@ class Vehicle(RoadObject):
             'y': self.position[1],
             'vx': self.velocity[0],
             'vy': self.velocity[1],
-            'heading': self.heading,
-            'cos_h': self.direction[0], # tatsaechliche x-Ausrichtung des vehicles (nicht Ausrichtung der Geschwindigkeit)
-            'sin_h': self.direction[1], # tatsaechliche y-Ausrichtung des vehicles (nicht Ausrichtung der Geschwindigkeit)
+            'heading': self.heading, # Gierwinkel
+            'cos_h': self.direction[0], # tatsaechliche x-Ausrichtung des vehicles berechnet durch Gierwinkel (nicht Ausrichtung der Geschwindigkeit)
+            'sin_h': self.direction[1], # tatsaechliche y-Ausrichtung des vehicles berechnet durch Gierwinkel (nicht Ausrichtung der Geschwindigkeit)
             'cos_d': self.destination_direction[0],
             'sin_d': self.destination_direction[1],
-            'long_off': self.lane_offset[0],
-            'lat_off': self.lane_offset[1],
+            'long_off': self.lane_offset[0], # :return: int -> longitudonaler offset zwischen aktueller Position und Beginn der Lane in Richtung Ende der Lane
+            'lat_off': self.lane_offset[1], # :return: int -> lateraler offset zwischen aktueller Position und Lane (Definiert als Mitte der Fahrbahn)
             'ang_off': self.lane_offset[2],
         }
         if not observe_intentions:

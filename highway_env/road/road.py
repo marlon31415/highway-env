@@ -23,6 +23,8 @@ class RoadNetwork(object):
     def add_lane(self, _from: str, _to: str, lane: AbstractLane) -> None:
         """
         A lane is encoded as an edge in the road network.
+        erste lane die hinzugefuegt wird ist linke Spur, da x-KO oben anfaengt
+        rechte Spur: (_id = config["lanes_count"]-1)
 
         :param _from: the node at which the lane starts.
         :param _to: the node at which the lane ends.
@@ -223,8 +225,8 @@ class RoadNetwork(object):
         net = net or RoadNetwork()
         nodes_str = nodes_str or ("0", "1")
         for lane in range(lanes):
-            origin = np.array([start, lane * StraightLane.DEFAULT_WIDTH])
-            end = np.array([start + length, lane * StraightLane.DEFAULT_WIDTH])
+            origin = np.array([start, lane * StraightLane.DEFAULT_WIDTH]) # array([x,y])
+            end = np.array([start + length, lane * StraightLane.DEFAULT_WIDTH]) # array([x,y])
             rotation = np.array([[np.cos(angle), np.sin(angle)], [-np.sin(angle), np.cos(angle)]])
             origin = rotation @ origin
             end = rotation @ end
@@ -305,9 +307,13 @@ class Road(object):
         self.np_random = np_random if np_random else np.random.RandomState()
         self.record_history = record_history
 
-    # gibt (sortierte) Liste mit den Fahrzeugen, die dem zu steuernden am naechsten sind; Laenge der Liste durch vehicles_count definiert
+ 
     def close_vehicles_to(self, vehicle: 'kinematics.Vehicle', distance: float, count: Optional[int] = None,
                           see_behind: bool = True, sort: bool = True) -> object:
+        """
+        gibt (sortierte) Liste mit den Fahrzeugen, die dem zu steuernden am naechsten sind; 
+        Laenge der Liste durch vehicles_count definiert
+        """
         vehicles = [v for v in self.vehicles
                     if np.linalg.norm(v.position - vehicle.position) < distance
                     and v is not vehicle
