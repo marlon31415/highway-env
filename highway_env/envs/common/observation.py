@@ -151,6 +151,7 @@ class KinematicObservation(ObservationType):
                  clip: bool = True,
                  see_behind: bool = False,
                  observe_intentions: bool = False,
+                 add_indiv_ego_obs: bool = False,
                  **kwargs: dict) -> None:
         """
         :param env: The environment to observe
@@ -173,6 +174,7 @@ class KinematicObservation(ObservationType):
         self.clip = clip
         self.see_behind = see_behind
         self.observe_intentions = observe_intentions
+        self.add_indiv_ego_obs = add_indiv_ego_obs
 
     def space(self) -> spaces.Space:
         return spaces.Box(shape=(self.vehicles_count, len(self.features)), low=-np.inf, high=np.inf, dtype=np.float32)
@@ -198,7 +200,7 @@ class KinematicObservation(ObservationType):
                 # falls feature ausserhalb von [f_range[0],f_range[1]] liegt, koennen Werte auch ausserhalb von [-1, 1] liegen 
                 df[feature] = utils.lmap(df[feature], [f_range[0], f_range[1]], [-1, 1])
                 if self.clip:
-                    # normalisierte Werte kleiner -1 und groesser 1 abschneiden
+                    # Abschneiden der normalisierten Werte, die kleiner -1 und groesser 1 sind 
                     # (falls Werte ausserhalb von Intervall [f_range[0],f_range[1]] lagen)
                     df[feature] = np.clip(df[feature], -1, 1)
         return df
@@ -218,11 +220,12 @@ class KinematicObservation(ObservationType):
                                                          see_behind=self.see_behind,
                                                          sort=self.order == "sorted")
         if close_vehicles:
-            origin = self.observer_vehicle if not self.absolute else None
+            origin = self.observer_vehicle if not self.absolute else None # Fahrzeug auf das Koordianten der anderen Fahrzeuge bezogen werden sollen
             df = pd.concat([df, pd.DataFrame.from_records(
                 [v.to_dict(origin, observe_intentions=self.observe_intentions)
                  for v in close_vehicles[-self.vehicles_count + 1:]])[self.features]],
                            ignore_index=True)
+
         # Normalize and clip
         if self.normalize:
             df = self.normalize_obs(df)
@@ -235,8 +238,20 @@ class KinematicObservation(ObservationType):
         obs = df.values.copy() # .values gibt array zurueck
         if self.order == "shuffled":
             self.env.np_random.shuffle(obs[1:])
-        # Flatten
-        return obs.astype(self.space().dtype) # in Datentyp des Observation_space umwandeln
+        # observation konvertieren (Flatten)
+        obs = obs.astype(self.space().dtype) # in Datentyp des Observation_space umwandeln
+
+        # add obervations only for ego-vehicle
+        if self.add_indiv_ego_obs:
+            # zusaetzliche ego observations
+            add_ego_obs = np.array([self.observer_vehicle.target_lane_offset[1], self.observer_vehicle.lane_offset[1], self.observer_vehicle.heading])
+            if add_ego_obs.shape[0] < len(self.features):
+                # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
+                zeros = np.zeros((len(self.features) - len(add_ego_obs)))
+            add_ego_obs = np.hstack((add_ego_obs, zeros))
+            obs = np.vstack([obs, add_ego_obs])
+        
+        return obs
 
 
 class OccupancyGridObservation(ObservationType):

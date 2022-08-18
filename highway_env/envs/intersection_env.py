@@ -113,8 +113,8 @@ class IntersectionEnv(AbstractEnv):
 
         The horizontal road has the right of way. More precisely, the levels of priority are:
             - 3 for horizontal straight lanes and right-turns
-            - 1 for vertical straight lanes and right-turns
             - 2 for horizontal left-turns
+            - 1 for vertical straight lanes and right-turns
             - 0 for vertical left-turns
 
         The code for nodes in the road network is:

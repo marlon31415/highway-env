@@ -22,7 +22,7 @@ class Vehicle(RoadObject):
     """ Vehicle length [m] """
     WIDTH = 2.0
     """ Vehicle width [m] """
-    DEFAULT_INITIAL_SPEEDS = [23, 25]
+    DEFAULT_INITIAL_SPEEDS = [23, 28]
     """ Range for random initial speeds [m/s] """
     MAX_SPEED = 40.
     """ Maximum reachable speed [m/s] """
@@ -78,7 +78,7 @@ class Vehicle(RoadObject):
         lane = road.network.get_lane((_from, _to, _id))
         if speed is None:
             if lane.speed_limit is not None:
-                speed = road.np_random.uniform(0.7*lane.speed_limit, 0.8*lane.speed_limit)
+                speed = road.np_random.uniform(0.75*lane.speed_limit, 0.92*lane.speed_limit)
             else:
                 speed = road.np_random.uniform(Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1])
         default_spacing = 12+1.0*speed
@@ -215,6 +215,32 @@ class Vehicle(RoadObject):
             long, lat = self.lane.local_coordinates(self.position)
             ang = self.lane.local_angle(self.heading, long)
             return np.array([long, lat, ang])
+        else:
+            return np.zeros((3,))
+
+    @property
+    def target_lane_offset(self) -> np.ndarray:
+        """
+        eigene Methode um Abstand zur Soll-Lane zu ermitteln
+        """
+        target_lane_id = len(self.road.network.all_side_lanes(self.lane_index))-1 # groesster Spurindex = rechte Spur
+        lane_index_id = self.lane_index[2]
+        if self.lane is not None:
+            if lane_index_id != target_lane_id:
+                # wenn nicht auf Target-Lane
+                # lokale Lane Koordinaten
+                long, lat = self.lane.local_coordinates(self.position)
+                # Anzahl Spuren bis Target-Lane
+                n_lanes_to_target = target_lane_id - lane_index_id
+                # lateraler Versatz bis Target-Lane (absolut)
+                lat -= n_lanes_to_target*self.lane.DEFAULT_WIDTH  # immer negativer Abstand da ego-vehicle links von rechter Spur (Definition ist an Definition von local_coordinates() angelehnt) 
+                ang = self.lane.local_angle(self.heading, long)  
+                return np.array([long, lat, ang])
+            else:
+                # wenn schon auf Target-Lane dann selbe Methode wie lane_offset()
+                long, lat = self.lane.local_coordinates(self.position)
+                ang = self.lane.local_angle(self.heading, long)  
+                return np.array([long, lat, ang]) 
         else:
             return np.zeros((3,))
 

@@ -39,9 +39,11 @@ class HighwayEnv(AbstractEnv):
             "observation": {
                 "type": "Kinematics",           # types aus 'highway_env.envs.common.observation'
                 "features": ["presence", "x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
-                "vehicles_count": 8,            # Number of observed vehicles
+                "vehicles_count": 5,            # Number of observed vehicles (incl. ego-vehicle)
                 "observe_intentions": False,    # False = standard
-                "absolut": False,               # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
+                "absolute": True,               # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
+                "normalize": False,             # normalsiert Observation zwischen -1 und 1; True = standard
+                "add_indiv_ego_obs": True,      # definiert ob an observation noch zusaetzliche Reihe mit observations nur fuer ego-vehicle angehaengt werden soll
             },
             "action": {
                 "type": "ContinuousAction",
@@ -61,6 +63,7 @@ class HighwayEnv(AbstractEnv):
             "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
             "collision_terminal": True,     # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
             "offroad_terminal": True,       # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "speed_limit": 30,              # v_max auf Road
         })
         return config
 
@@ -72,7 +75,7 @@ class HighwayEnv(AbstractEnv):
 
     def _create_road(self) -> None:
         """Create a road composed of straight adjacent lanes without vehicles"""
-        self.road = Road(network=RoadNetwork.straight_road_network(self.config["lanes_count"], speed_limit=30),
+        self.road = Road(network=RoadNetwork.straight_road_network(self.config["lanes_count"], speed_limit=self.config["speed_limit"]),
                          np_random=self.np_random, record_history=self.config["show_trajectories"])
 
     def _create_vehicles(self) -> None:
@@ -93,7 +96,7 @@ class HighwayEnv(AbstractEnv):
             # zufaellige Daten zum erzeugen des vehicles
             vehicle = Vehicle.create_random(
                 self.road,
-                speed=25,
+                speed=None, # wenn None dann wird v zufaellig in Intervall [-Vehicle.DEFAULT_INITIAL_SPEEDS, Vehicle.DEFAULT_INITIAL_SPEEDS] gewaehlt
                 lane_id=self.config["initial_lane_id"],
                 spacing=self.config["ego_spacing"]
             )
@@ -127,9 +130,9 @@ class HighwayEnv(AbstractEnv):
         lat_reward = 0.25  # wenn lat_reward veraendert wird muss Vorfaktor veraendert werden!!!
 
         """reward berechnen"""
-        # collision reward
-        # + right lane reward: f(x) = 1 / (num_lanes-1)^2 * lane^2 -> diskrete Funktion; auf lane 0 immer Null und auf rechter lane (num_lanes-1) immer 1; dazwischen quadratisch
-        # + high speed reward: nur zwischen definiertem Bereich gibt es reward
+        # collision reward: bei crash mit anderem Fahrzeug \
+        # + right lane reward: f(x) = 1 / (num_lanes-1)^2 * lane^2 -> diskrete Funktion; auf lane 0 immer Null und auf rechter lane (num_lanes-1) immer 1; dazwischen quadratisch \
+        # + high speed reward: nur zwischen definiertem Bereich gibt es reward \
         # + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
         reward = \
             + self.config["collision_reward"] * self.vehicle.crashed \
@@ -145,13 +148,14 @@ class HighwayEnv(AbstractEnv):
         return reward
 
     def _is_terminal(self) -> bool:
-        """The episode is over if the ego vehicle crashed or the time is out."""
+        """The episode is over if the ego vehicle crashed or vehicle not on the road or the time is out."""
         return self.time >= self.config["duration"] or \
             (self.config["collision_terminal"] and self.vehicle.crashed) or \
             (self.config["offroad_terminal"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
     def _cost(self, action: int) -> float:
         """The cost signal is the occurrence of unsafe states (collision and offroad)."""
+
         return float(self.vehicle.crashed) + float(not self.vehicle.on_road)
 
      
