@@ -120,22 +120,31 @@ class ContinuousAction(ActionType):
         self.last_action = np.zeros(self.size)
 
     def space(self) -> spaces.Box:
-        return spaces.Box(-1., 1., shape=(self.size,), dtype=np.float32)
+        return spaces.Box(-1., 1., shape=(self.size,), dtype=np.float32) # hier muss evtl noch die -1,1 geaendert werden aber hat keine Auswirkung auf Nutzung der Klasse
 
     @property
     def vehicle_class(self) -> Callable:
         return Vehicle if not self.dynamical else BicycleVehicle
 
     def act(self, action: np.ndarray) -> None:
+        """
+        wird von _simulate() in AbstractEnv() aufgerufen
+        So modifiziert, dass zulässiger Actionbereich (Input) nicht mehr zwischen -1 und 1 liegt.
+        """
         if self.clip:
-            action = np.clip(action, -1, 1)
+            action = np.clip(action, [self.acceleration_range[0], self.steering_range[0]] , [self.acceleration_range[1], self.steering_range[1]])
+            # action = np.clip(action, -1, 1) # highway-env standard
+
         if self.speed_range:
             self.controlled_vehicle.MIN_SPEED, self.controlled_vehicle.MAX_SPEED = self.speed_range
+
         # acceleration und steering als "richtige Werte" (nicht mehr zwischen [-1,1]) fuer action in ego-vehicle speichern
         if self.longitudinal and self.lateral:
             self.controlled_vehicle.act({
-                "acceleration": utils.lmap(action[0], [-1, 1], self.acceleration_range),
-                "steering": utils.lmap(action[1], [-1, 1], self.steering_range),
+                "acceleration": action[0],
+                "steering": action[1],
+                # "acceleration": utils.lmap(action[0], [-1, 1], self.acceleration_range),  # highway-env standard
+                # "steering": utils.lmap(action[1], [-1, 1], self.steering_range),          # highway-env standard
             })
         elif self.longitudinal:
             self.controlled_vehicle.act({

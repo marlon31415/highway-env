@@ -106,7 +106,7 @@ class AbstractEnv(gym.Env):
                 "type": "Kinematics"
             },
             "action": {
-                "type": "DiscreteMetaAction"
+                "type": "DiscreteMetaAction",
             },
             "simulation_frequency": 15,  # [Hz]
             "policy_frequency": 1,  # [Hz]
