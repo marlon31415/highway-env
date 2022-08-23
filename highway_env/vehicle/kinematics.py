@@ -40,10 +40,10 @@ class Vehicle(RoadObject):
                  position: Vector,
                  heading: float = 0,
                  speed: float = 0,
-                 predition_type: str = 'constant_steering'):
+                 prediction_type: str = 'zero_steering'):
         super().__init__(road, position, heading, speed)
         self.beta = 0 # Schwimmwinkel bei Initialisierung zu Null setzen
-        self.prediction_type = predition_type
+        self.prediction_type = prediction_type
         self.action = {'steering': 0, 'acceleration': 0}
         self.crashed = False # definiert ob vehicle anderes Objekt beruehrt
         self.impact = None   # definiert ob
@@ -105,6 +105,7 @@ class Vehicle(RoadObject):
     def act(self, action: Union[dict, str] = None) -> None:
         """
         Store an action to be repeated.
+        Before using action in step() it gets adjusted in clip_actions()
 
         :param action: the input action
         """
@@ -134,7 +135,7 @@ class Vehicle(RoadObject):
                                    np.sin(self.heading + self.beta)])
         # Integration der Geschwindigkeit fuer Position
         self.position += v * dt
-        # falls impact
+        # falls impact (is not None wenn Variable will_intersect von Methode _is_colliding() in Methode handle_collisions() in Klasse RoadObject() einen Wert hat)
         if self.impact is not None:
             self.position += self.impact
             self.crashed = True
@@ -147,9 +148,10 @@ class Vehicle(RoadObject):
         self.on_state_update()
 
     def clip_actions(self) -> None:
-        if self.crashed:
-            self.action['steering'] = 0
-            self.action['acceleration'] = -1.0*self.speed
+        # if self.crashed:
+        #     """definiert wie actions bei crash angepasst werden sollen: bremsen und aufhoeren zu lenken"""
+        #     self.action['steering'] = 0
+        #     self.action['acceleration'] = -1.0*self.speed
         self.action['steering'] = float(self.action['steering'])
         self.action['acceleration'] = float(self.action['acceleration'])
         if self.speed > self.MAX_SPEED:
@@ -190,7 +192,7 @@ class Vehicle(RoadObject):
 
     @property
     def velocity(self) -> np.ndarray:
-        return self.speed * self.v_direction  # TODO: slip angle beta should be used here: UPDATE beta verwendet (15.08.2022)
+        return self.speed * self.v_direction # TODO: slip angle beta should be used here: UPDATE beta verwendet (15.08.2022)
 
     @property
     def destination(self) -> np.ndarray:

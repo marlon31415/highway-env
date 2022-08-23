@@ -35,6 +35,7 @@ class RoadObject(ABC):
         self.speed = speed
         self.lane_index = self.road.network.get_closest_lane_index(self.position, self.heading) if self.road else np.nan # Ausgabetyp ist tuple(_from: str, _to: str, _id: int)
         self.lane = self.road.network.get_lane(self.lane_index) if self.road else None # Ausgabetyp ist AbstractLane
+        self.num_lanes = len(self.road.network.all_side_lanes(self.lane_index)) # Anzahl der Lanes von der Road auf der vehicle faehrt
 
         # Enable collision with other collidables
         self.collidable = True
@@ -97,6 +98,10 @@ class RoadObject(ABC):
                 self.hit = True
             if not other.solid:
                 other.hit = True
+        else:
+            # property crashed wieder auf False setzen wenn crash vorbei
+            # --> eigene Erweiterung des codes <--
+            self.crashed = False
 
     def _is_colliding(self, other, dt):
         # Fast spherical pre-check

@@ -191,7 +191,7 @@ class AbstractEnv(gym.Env):
                 phi = phi_tmp
                 index = cnt
 
-        if ego_lane_index_id == 0 or ego_lane_index_id == len(self.vehicle.road.network.all_side_lanes(ego_lane_index))-1:
+        if ego_lane_index_id == 0 or ego_lane_index_id == self.vehicle.num_lanes-1:
             """
             Safety Index zu Road Grenzen: berechnen falls ego-vehicle auf einer der aeusseren Lanes faehrt
             """

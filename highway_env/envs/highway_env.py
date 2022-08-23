@@ -37,7 +37,7 @@ class HighwayEnv(AbstractEnv):
         config = super().default_config_abstract()
         config.update({
             "observation": {
-                "type": "Kinematics",           # types aus 'highway_env.envs.common.observation'
+                "type": "Kinematics",           # types aus 'highway_env\envs\common\observation'
                 "features": ["presence", "x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
                 "vehicles_count": 5,            # Number of observed vehicles (incl. ego-vehicle)
                 "observe_intentions": False,    # False = standard
@@ -64,6 +64,7 @@ class HighwayEnv(AbstractEnv):
             "collision_terminal": True,     # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
             "offroad_terminal": True,       # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_limit": 30,              # v_max auf Road
+            "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
         return config
 
@@ -101,7 +102,7 @@ class HighwayEnv(AbstractEnv):
                 spacing=self.config["ego_spacing"]
             )
             # vehicle class wird mit vorher generierten Daten aufgerufen -> es wird vehicle erzeugt
-            vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed)
+            vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed, self.config["prediction_type"])
             self.controlled_vehicles.append(vehicle)
             self.road.vehicles.append(vehicle) # vehicles-liste in Road-klasse
 
@@ -109,7 +110,7 @@ class HighwayEnv(AbstractEnv):
                 """erzeugt andere Verkehrsteilnehmer mit Methode create_random() von class Vehicle(RoadObject)"""
                 vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
                 vehicle.randomize_behavior()
-                self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab indize 1)
+                self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab Index 1)
 
     def _reward(self, action: Action) -> float:
         """
@@ -119,14 +120,16 @@ class HighwayEnv(AbstractEnv):
         """
         # Liste aus allen Spuren auf der Road, die dieselben Indexe _from und _to haben: 
         # [(_from, _to, _id: 0), (_from, _to, _id: 1), (_from, _to, _id: 2), ...]
-        neighbours = self.road.network.all_side_lanes(self.vehicle.lane_index)
+        num_lanes = self.vehicle.num_lanes
         # lane id der Spur des ego-vehicles; rechte Spur hat _id = config["lanes_count"]-1
         lane = self.vehicle.target_lane_index[2] if isinstance(self.vehicle, ControlledVehicle) \
             else self.vehicle.lane_index[2]
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
-        forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading)
+        forward_speed = self.vehicle.velocity[0] # berechnet mit Gierwinkel theta und Schwimmwinkel beta
+        # forward_speed = self.vehicle.speed * np.cos(self.vehicle.heading) # default (nur theta)
         scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
-        # Abstand zur Mitte bis zu welchem es noch reward gibt
+        
+        # Abstand zur Mitte bis zu dem es noch reward gibt
         lat_reward = 0.25  # wenn lat_reward veraendert wird muss Vorfaktor veraendert werden!!!
 
         """reward berechnen"""
@@ -136,10 +139,10 @@ class HighwayEnv(AbstractEnv):
         # + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
         reward = \
             + self.config["collision_reward"] * self.vehicle.crashed \
-            + self.config["right_lane_reward"] * 1/max(len(neighbours) - 1, 1)**2 * lane**2\
+            + self.config["right_lane_reward"] * 1/max(num_lanes - 1, 1)**2 * lane**2\
             + self.config["high_speed_reward"] * np.clip(scaled_speed, 0, 1) \
             + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
-        # reward auf dem Intervall [0,1] normalisieren
+        # reward auf Intervall [0,1] normalisieren
         reward = utils.lmap(reward,
                           [self.config["collision_reward"],
                            self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
@@ -155,8 +158,24 @@ class HighwayEnv(AbstractEnv):
 
     def _cost(self, action: int) -> float:
         """The cost signal is the occurrence of unsafe states (collision and offroad)."""
+        cost = {}
+        cost['cost_crash'] = 0
+        cost['cost_round_boundary'] = 0
 
-        return float(self.vehicle.crashed) + float(not self.vehicle.on_road)
+        if self.vehicle.crashed:
+            cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen)
+        if not self.vehicle.on_road:
+            cost['cost_round_boundary'] = 1
+
+        sum_cost = 0
+        for k in list(cost.keys()):
+            # cost summieren
+            sum_cost += cost[k]
+        if sum_cost >= 1:
+            # cost kann maximal 1 sein
+            sum_cost = 1
+
+        return sum_cost
 
      
 

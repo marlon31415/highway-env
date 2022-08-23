@@ -120,7 +120,13 @@ class ContinuousAction(ActionType):
         self.last_action = np.zeros(self.size)
 
     def space(self) -> spaces.Box:
-        return spaces.Box(-1., 1., shape=(self.size,), dtype=np.float32) # hier muss evtl noch die -1,1 geaendert werden aber hat keine Auswirkung auf Nutzung der Klasse
+        """
+        Definiert wie ActionSpace aufgebaut ist.
+        Hat keinen Einfluss auf tatsaechlichen ActionSpace, sondern ist dafuer gedacht, 
+        dass RL-Algorithmus automatisch ein neuronales Netz aufbauen kann.
+        """
+        # return spaces.Box(-1, 1, shape=(self.size,), dtype=np.float32) # highway-env default
+        return spaces.Box(np.float32(np.array([-5.,-np.pi/4])), np.float32(np.array([5.,np.pi/4])), shape=(self.size,), dtype=np.float32)
 
     @property
     def vehicle_class(self) -> Callable:
@@ -128,23 +134,23 @@ class ContinuousAction(ActionType):
 
     def act(self, action: np.ndarray) -> None:
         """
-        wird von _simulate() in AbstractEnv() aufgerufen
+        Speichert den action input fuer das ego-vehicle in vehicle dict und entnormiert diesen falls normierter input vorliegt.
+        Wird von _simulate() in AbstractEnv() aufgerufen.
         So modifiziert, dass zulässiger Actionbereich (Input) nicht mehr zwischen -1 und 1 liegt.
         """
         if self.clip:
             action = np.clip(action, [self.acceleration_range[0], self.steering_range[0]] , [self.acceleration_range[1], self.steering_range[1]])
-            # action = np.clip(action, -1, 1) # highway-env standard
+            # action = np.clip(action, -1, 1) # highway-env default
 
         if self.speed_range:
             self.controlled_vehicle.MIN_SPEED, self.controlled_vehicle.MAX_SPEED = self.speed_range
-
-        # acceleration und steering als "richtige Werte" (nicht mehr zwischen [-1,1]) fuer action in ego-vehicle speichern
+       
         if self.longitudinal and self.lateral:
             self.controlled_vehicle.act({
-                "acceleration": action[0],
-                "steering": action[1],
-                # "acceleration": utils.lmap(action[0], [-1, 1], self.acceleration_range),  # highway-env standard
-                # "steering": utils.lmap(action[1], [-1, 1], self.steering_range),          # highway-env standard
+                "acceleration": action[0], # acceleration als "richtiger Werte" (nicht mehr zwischen [-1,1]) fuer action des ego-vehicles speichern
+                "steering": action[1], # steering als "richtigen Werte" (nicht mehr zwischen [-1,1]) fuer action des ego-vehicles speichern
+                # "acceleration": utils.lmap(action[0], [-1, 1], self.acceleration_range),  # highway-env default
+                # "steering": utils.lmap(action[1], [-1, 1], self.steering_range),          # highway-env default
             })
         elif self.longitudinal:
             self.controlled_vehicle.act({

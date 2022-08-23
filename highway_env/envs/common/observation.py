@@ -177,7 +177,14 @@ class KinematicObservation(ObservationType):
         self.add_indiv_ego_obs = add_indiv_ego_obs
 
     def space(self) -> spaces.Space:
-        return spaces.Box(shape=(self.vehicles_count, len(self.features)), low=-np.inf, high=np.inf, dtype=np.float32)
+        """
+        Definiert wie ObservationSpace aufgebaut ist.
+        Hat keinen Einfluss auf tatsaechlichen ObservationSpace, sondern ist dafuer gedacht, 
+        dass RL-Algorithmus automatisch ein neuronales Netz aufbauen kann.
+
+        Erste dim von shape mit 1 addiert, da zusaetzliche observations hinzugefuegt wurden
+        """
+        return spaces.Box(shape=((self.vehicles_count+1), len(self.features)), low=-np.inf, high=np.inf, dtype=np.float32)
 
     def normalize_obs(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -206,6 +213,7 @@ class KinematicObservation(ObservationType):
         return df
 
     def observe(self) -> np.ndarray:
+        """Erstellt Observation output."""
         if not self.env.road:
             return np.zeros(self.space().shape)
 
@@ -220,7 +228,7 @@ class KinematicObservation(ObservationType):
                                                          see_behind=self.see_behind,
                                                          sort=self.order == "sorted")
         if close_vehicles:
-            origin = self.observer_vehicle if not self.absolute else None # Fahrzeug auf das Koordianten der anderen Fahrzeuge bezogen werden sollen
+            origin = self.observer_vehicle if not self.absolute else None # Fahrzeug auf das die Koordianten der anderen Fahrzeuge bezogen werden sollen
             df = pd.concat([df, pd.DataFrame.from_records(
                 [v.to_dict(origin, observe_intentions=self.observe_intentions)
                  for v in close_vehicles[-self.vehicles_count + 1:]])[self.features]],
@@ -239,17 +247,36 @@ class KinematicObservation(ObservationType):
         if self.order == "shuffled":
             self.env.np_random.shuffle(obs[1:])
         # observation konvertieren (Flatten)
-        obs = obs.astype(self.space().dtype) # in Datentyp des Observation_space umwandeln
+        obs = obs.astype(self.space().dtype) # in Datentyp des ObservationSpace umwandeln
 
-        # add obervations only for ego-vehicle
         if self.add_indiv_ego_obs:
-            # zusaetzliche ego observations
-            add_ego_obs = np.array([self.observer_vehicle.target_lane_offset[1], self.observer_vehicle.lane_offset[1], self.observer_vehicle.heading])
+            """
+            zusaetzliche ego observations:
+                - Offset zur Mitte der target Lane
+                - Offset zur Mitte der aktuellen Lane
+                - Gierwinkel
+                - gibt es Spur rechts von aktueller Lane? -> Ja: 1, Nein: 0
+                - gibt es Spur links von aktueller Lane? -> Ja: 1, Nein: 0
+            
+            Anzahl der zusaetzlichen observations DARF Anzahl features NICHT UEBERSCHREITEN, da
+            sonst Inkompatibilitaet mit np.array besteht (Loesung: nur 1d Array fuer ObservationSpace erstellen)
+            """
+            add_ego_obs = np.array([self.observer_vehicle.target_lane_offset[1], \
+                self.observer_vehicle.lane_offset[1], \
+                self.observer_vehicle.heading, \
+                1 if (self.observer_vehicle.num_lanes-1 != self.observer_vehicle.lane_index[2]) else 0, \
+                1 if (0 != self.observer_vehicle.lane_index[2]) else 0])
             if add_ego_obs.shape[0] < len(self.features):
                 # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
                 zeros = np.zeros((len(self.features) - len(add_ego_obs)))
-            add_ego_obs = np.hstack((add_ego_obs, zeros))
+                add_ego_obs = np.hstack((add_ego_obs, zeros))
+            if add_ego_obs.shape[0] > len(self.features):
+                # abfangen von inkompatibilitaets error: falls mehr observations als Laenge 'features' hinzugefuegt werden sollen dann abschneiden
+                add_ego_obs = add_ego_obs[:len(self.features)]
             obs = np.vstack([obs, add_ego_obs])
+
+        # flatten observation from 2d-array to 1d-array
+        # obs = obs.flatten()
         
         return obs
 
