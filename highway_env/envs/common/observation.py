@@ -246,8 +246,8 @@ class KinematicObservation(ObservationType):
         obs = df.values.copy() # .values gibt array zurueck
         if self.order == "shuffled":
             self.env.np_random.shuffle(obs[1:])
-        # observation konvertieren (Flatten)
-        obs = obs.astype(self.space().dtype) # in Datentyp des ObservationSpace umwandeln
+        # in Datentyp des ObservationSpace umwandeln
+        obs = obs.astype(self.space().dtype) 
 
         if self.add_indiv_ego_obs:
             """
@@ -266,6 +266,9 @@ class KinematicObservation(ObservationType):
                 self.observer_vehicle.heading, \
                 1 if (self.observer_vehicle.num_lanes-1 != self.observer_vehicle.lane_index[2]) else 0, \
                 1 if (0 != self.observer_vehicle.lane_index[2]) else 0])
+            # in Datentyp des ObservationSpace umwandeln
+            add_ego_obs = add_ego_obs.astype(self.space().dtype)
+
             if add_ego_obs.shape[0] < len(self.features):
                 # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
                 zeros = np.zeros((len(self.features) - len(add_ego_obs)))
@@ -278,7 +281,7 @@ class KinematicObservation(ObservationType):
         # flatten observation from 2d-array to 1d-array
         # obs = obs.flatten()
         
-        return obs
+        return obs # wird WARN in gym ausloesen, da obs nicht 1D (obs.flatten) -> obs muss zu spaeterem Zeitpunkt (z.B. in RL-Algo) noch weiterverarbeitet werden
 
 
 class OccupancyGridObservation(ObservationType):

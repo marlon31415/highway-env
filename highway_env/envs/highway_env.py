@@ -156,6 +156,16 @@ class HighwayEnv(AbstractEnv):
             (self.config["collision_terminal"] and self.vehicle.crashed) or \
             (self.config["offroad_terminal"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
+    def _is_truncation(self) -> bool:
+        """
+        whether a truncation condition outside the scope of the MDP is satisfied.
+        Typically a timelimit, but could also be used to indicate agent physically going out of bounds.
+        Can be used to end the episode prematurely before a `terminal state` is reached.
+
+        :return: False -> wird noch nicht verwendet daher return egal
+        """
+        return False
+
     def _cost(self, action: int) -> float:
         """The cost signal is the occurrence of unsafe states (collision and offroad)."""
         cost = {}

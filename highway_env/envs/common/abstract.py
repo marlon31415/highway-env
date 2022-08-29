@@ -260,9 +260,20 @@ class AbstractEnv(gym.Env):
 
     def _is_terminal(self) -> bool:
         """
-        Check whether the current state is a terminal state
+        whether a `terminal state` (as defined under the MDP of the task) is reached.
+        In this case further step() calls could return undefined results.
 
-        :return:is the state terminal
+        :return: is the state terminal
+        """
+        raise NotImplementedError
+
+    def _is_truncation(self) -> bool:
+        """
+        whether a truncation condition outside the scope of the MDP is satisfied.
+        Typically a timelimit, but could also be used to indicate agent physically going out of bounds.
+        Can be used to end the episode prematurely before a `terminal state` is reached.
+
+        :return: is the state truncated
         """
         raise NotImplementedError
 
@@ -342,7 +353,7 @@ class AbstractEnv(gym.Env):
         """
         raise NotImplementedError()
 
-    def step(self, action: Action) -> Tuple[Observation, float, bool, dict]:
+    def step(self, action: Action) -> Tuple[Observation, float, bool, bool, dict]:
         """
         Perform an action and step the environment dynamics.
 
@@ -361,9 +372,10 @@ class AbstractEnv(gym.Env):
         obs = self.observation_type.observe()
         reward = self._reward(action)
         terminal = self._is_terminal()
+        truncation = self._is_truncation()
         info = self._info(obs, action)
 
-        return obs, reward, terminal, info
+        return obs, reward, terminal, truncation, info
 
     def _simulate(self, action: Optional[Action] = None) -> None:
         """
