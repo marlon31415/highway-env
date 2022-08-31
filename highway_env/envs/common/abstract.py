@@ -125,8 +125,8 @@ class AbstractEnv(gym.Env):
     #=================================================================
     def set_sis_paras(self, sigma, k, n):
         """safety Index Parameter setzen"""
-        self.sis_para_k = k
         self.sis_para_sigma = sigma
+        self.sis_para_k = k
         self.sis_para_n = n
 
     def adaptive_safety_index(self):
@@ -171,17 +171,18 @@ class AbstractEnv(gym.Env):
             # und Division normiert diesen Anteil auf den Abstand zum anderen vehicle
             dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / ego_to_vehicle_distance
             # if dotd <0, then we are getting closer to hazard
-            sis_info_tp1.append((d, dotd))
 
             # compute the safety index for specific vehicle
             if  ego_lane_index == vehicle.lane_index: # gilt nur wenn Fahrzeuge auf selber lane (nicht gegeben wenn ego-vehicle z.b. in Kreisverkehr faehrt)
                 ''' Mindestabstand d_min zwischen Fahrzeugen abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht und von Gierwinkel des ego-vehicles'''
                 d_min = ego_length * 1.1
             else:
-                r = np.sqrt(ego_width**2 + ego_length**2) / 2 # Abstand von Fahrzeugmitte bis Ecke
+                r = np.sqrt(ego_width**2 + ego_length**2) / 2 # Laenge von Fahrzeugmitte bis Ecke
                 theta_0 = np.arcsin((ego_width/2) / r) # Winkel zwischen Fahrzeuglaengsachse und Ecke
                 theta = abs(self.vehicle.heading - self.vehicle.lane.heading_at(self.vehicle.lane_offset[0])) # zusaetzlicher Drehwinkel des Fahrzeugs abzueglich der Strassenkruemmung
                 d_min = (np.sin(theta_0 + theta) * r + ego_width/2)* 1.1 # Abstand den ego-vehicle aufgrund von Gieren braucht + halbe Breite des anderen Fahrzeugs
+
+            sis_info_tp1.append((d, dotd, d_min))
 
             phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
             ''' phi = sigma + d_min^n - d^n - k*dotd '''
@@ -209,9 +210,10 @@ class AbstractEnv(gym.Env):
                 d = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1]
                 ego_to_vehicle_direction = np.array([0, d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke              
             
-            # dot d = velocity            
+            # dot d = velocity 
+            # TODO: evtl v von anderem vehicle in Berechnung von dotd einbeziehen            
             dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / max(d, 0.001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
-            sis_info_tp1.append((d, dotd))
+            sis_info_tp1.append((d, dotd, d_min))
 
             phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
             ''' phi = sigma + d_min^n - d^n - k*dotd '''
@@ -221,8 +223,11 @@ class AbstractEnv(gym.Env):
                 phi = phi_tmp
                 index = cnt
 
+        else:
+            sis_info_tp1.append((10, 0, 2)) # irgendein (d,dotd,d_min) Paar, sodass safety index negativ wird und Laenge von sis_trans Liste immer gleich lang ist
 
         self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
+
         return phi, index
         
     #=================================================================
