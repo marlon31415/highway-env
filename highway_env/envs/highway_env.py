@@ -1,12 +1,3 @@
-'''
-Aenderungen:
-- default_config: 
-    - "action": {"type": "ContinuousAction"} (vorher: "DiscreteMetaAction")
-    - "offroad_terminal": True (vorher: False)
--
--
-'''
-
 import numpy as np
 from gym.envs.registration import register
 
@@ -49,7 +40,7 @@ class HighwayEnv(AbstractEnv):
                 "type": "ContinuousAction",
             },
             "lanes_count": 4,               # Anzahl Spuren
-            "vehicles_count": 20,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
+            "vehicles_count": 10,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
             "initial_lane_id": None,        # zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration": 40,                 # [s]
@@ -61,8 +52,8 @@ class HighwayEnv(AbstractEnv):
             "lane_change_reward": 0,        # The reward received at each lane change action.
             "middle_of_lane_reward": 0.2,   # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "collision_terminal": True,     # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
-            "offroad_terminal": True,       # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "collision_trunc": True,        # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
+            "offroad_trunc": True,          # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_limit": 30,              # v_max auf Road
             "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
@@ -152,9 +143,7 @@ class HighwayEnv(AbstractEnv):
 
     def _is_terminal(self) -> bool:
         """The episode is over if the ego vehicle crashed or vehicle not on the road or the time is out."""
-        return self.time >= self.config["duration"] or \
-            (self.config["collision_terminal"] and self.vehicle.crashed) or \
-            (self.config["offroad_terminal"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
+        return self.time >= self.config['duration']
 
     def _is_truncation(self) -> bool:
         """
@@ -164,18 +153,20 @@ class HighwayEnv(AbstractEnv):
 
         :return: False -> wird noch nicht verwendet daher return egal
         """
-        return False
+        # wird aktuell nicht verwendet, da bei cost Verletzung nich gestoppt werden soll
+        return (self.config["collision_trunc"] and self.vehicle.crashed) or \
+            (self.config["offroad_trunc"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
     def _cost(self, action: int) -> float:
         """The cost signal is the occurrence of unsafe states (collision and offroad)."""
         cost = {}
         cost['cost_crash'] = 0
-        cost['cost_round_boundary'] = 0
+        cost['cost_road_boundary'] = 0
 
         if self.vehicle.crashed:
-            cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen)
+            cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen
         if not self.vehicle.on_road:
-            cost['cost_round_boundary'] = 1
+            cost['cost_road_boundary'] = 1
 
         sum_cost = 0
         for k in list(cost.keys()):
