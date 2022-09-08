@@ -52,8 +52,8 @@ class HighwayEnv(AbstractEnv):
             "lane_change_reward": 0,        # The reward received at each lane change action.
             "middle_of_lane_reward": 0.2,   # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "collision_trunc": True,        # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
-            "offroad_trunc": True,          # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "collision_trunc": False,        # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
+            "offroad_trunc": False,          # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_limit": 30,              # v_max auf Road
             "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
@@ -138,11 +138,17 @@ class HighwayEnv(AbstractEnv):
                           [self.config["collision_reward"],
                            self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
                           [0, 1]) 
-        reward = 0 if not self.vehicle.on_road else reward
+        # reward = 0 if not self.vehicle.on_road else reward # TODO: mit oder ohne dieser Zeile?
         return reward
 
     def _is_terminal(self) -> bool:
-        """The episode is over if the ego vehicle crashed or vehicle not on the road or the time is out."""
+        """
+        The episode is over when time reaches the max. defined duration time
+        
+        TODO: als zusaetzliche Bedingung "kein crash in gesamter Laufzeit" hinzufuegen. 
+        Aber dann besteht Problem wann im RL-Training die Episode beenden soll. 
+        (?beenden wenn zeit abgelaufen; ziel erreicht wenn ohne crash, falls crash dann ziel nicht erreicht)
+        """
         return self.time >= self.config['duration']
 
     def _is_truncation(self) -> bool:
@@ -154,7 +160,8 @@ class HighwayEnv(AbstractEnv):
         :return: False -> wird noch nicht verwendet daher return egal
         """
         # wird aktuell nicht verwendet, da bei cost Verletzung nich gestoppt werden soll
-        return (self.config["collision_trunc"] and self.vehicle.crashed) or \
+        return (self.time >= self.config['duration'] and self._is_terminal()==False) or \
+            (self.config["collision_trunc"] and self.vehicle.crashed) or \
             (self.config["offroad_trunc"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
     def _cost(self, action: int) -> float:
@@ -162,7 +169,7 @@ class HighwayEnv(AbstractEnv):
         cost = {}
         cost['cost_crash'] = 0
         cost['cost_road_boundary'] = 0
-
+    
         if self.vehicle.crashed:
             cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen
         if not self.vehicle.on_road:

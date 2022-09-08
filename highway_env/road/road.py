@@ -246,6 +246,9 @@ class RoadNetwork(object):
         :return: position, heading
         """
         while len(route) > 1 and longitudinal > self.get_lane(route[0]).length:
+            # while Schleife wird aktiv wenn Route definiert wurde und Auto sich nach dem Ende der ersten Spur in der Route befindet
+            # fuer jeden Aufruf der Methode findet diese Schleife die aktuelle Spur innerhalb der Route 
+            # sobald diese gefunden ist, ist while-Bed. nicht mehr aktiv und return wird ausgegeben 
             longitudinal -= self.get_lane(route[0]).length
             route = route[1:]
         return self.get_lane(route[0]).position(longitudinal, lateral), self.get_lane(route[0]).heading_at(longitudinal)

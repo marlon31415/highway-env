@@ -176,6 +176,7 @@ class StraightLane(AbstractLane):
         self.speed_limit = speed_limit
 
     def position(self, longitudinal: float, lateral: float) -> np.ndarray:
+        """absolute Koordinaten der lokalen Lane Koordinaten longitudinal und lateral"""
         return self.start + longitudinal * self.direction + lateral * self.direction_lateral
 
     def heading_at(self, longitudinal: float) -> float:
