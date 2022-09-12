@@ -193,7 +193,7 @@ class ControlledVehicle(Vehicle):
         If a lane change is detected, the lane change is predicted with const. lateral and longitudinal speed till finished.
         After that the middle of the lane is followed with constant speed.
 
-        :param times: timesteps of prediction
+        :param times: timesteps of prediction -> np.array([0.1, 0.1, 0.1, 0.1, ...])
         :return: positions, headings as tuple -> ( (array([x0,y0]), array([x1,y1]), ..., array([xn,yn])), (heading1, heading2, ..., headingn) )
         """
         threshold = 2/180*np.pi # Winkelunterschied zwischen Lane und Geschwindigkeit ab dem Spurwechsel in Praediktion der Trajektorie einfliessen soll
@@ -208,9 +208,14 @@ class ControlledVehicle(Vehicle):
         if abs(theta1-theta2) > threshold:
             """Spurwechsel"""
 
-            if theta1-theta2 > 0 and route[0][2] != 0:
+            # Goal Lane fuer Fahrbahnwechsel (abhaengig von Ausrichtung des Autos und ob Auto rechts oder links von Spurmitte)
+            if theta1-theta2 > 0: # moeglicher Wechsel nach links
+                goal_lane = (route[0][0], route[0][1], route[0][2]-1) if coordinates[1]<=0 else route[0] # Spurwechsel oder nur in Richtung Spurmitte fahren
+            else: # moeglicher Wechsel nach rechts
+                goal_lane = (route[0][0], route[0][1], route[0][2]+1) if coordinates[1]>=0 else route[0] # Spurwechsel oder nur in Richtung Spurmitte fahren
+
+            if theta1-theta2 > 0 and goal_lane[2] >= 0:
                 """Spurwechsel nach links (pruefen ob Auto nach links will und ob es sich nicht auf linker Spur befindet)"""
-                goal_lane = (route[0][0], route[0][1], route[0][2]-1)
                 longitudinal = coordinates[0] # longitudinaler "Fortschritt" auf Lane
                 lateral = coordinates[1] # Abweichung zu Lane Mitte
                 # Hilfgroessen fuer Spurwechsel
@@ -219,34 +224,35 @@ class ControlledVehicle(Vehicle):
                 # Geschwindigkeiten die zu Position integriert werden (nur zu Beginn ein mal berechnen, dann als konstant annehmen)
                 theta_lane = self.lane.heading_at(longitudinal)
                 lane_direction = np.array([np.cos(theta_lane), np.sin(theta_lane)])
-                v_in_lane_direction = np.dot(self.velocity, lane_direction) / np.linalg.norm(lane_direction) # Geschwindigkeit in Richtung der Spur
-                v_orthogonal = np.dot(self.velocity, other_lane_direction) / np.linalg.norm(other_lane_direction) # Geschwindigkeit in Richtung der anderen Spur bzw. orthogonal zu v_in_lane_direction
+                v_in_lane_direction = np.dot(self.velocity, lane_direction) / np.linalg.norm(lane_direction) # Geschwindigkeit in Richtung der Spur (konstant)
+                v_orthogonal = -np.dot(self.velocity, other_lane_direction) / np.linalg.norm(other_lane_direction) # Geschwindigkeit in Richtung der anderen Spur bzw. orthogonal zu v_in_lane_direction (konstant)
                 
-                for t in times: # oder while self.lane == get_lane(route[0])
+                cur_lane_idx = route[0]
+                for t in times:
                     if lateral <= -self.lane.DEFAULT_WIDTH/2:
                         lateral = self.lane.DEFAULT_WIDTH/2 # von lokalen lateralen KO der eigentlichen Spur zu denen der neuen Spur; ein bisschen unschoen aber sollte klappen
-                    theta_lane = self.lane.heading_at(longitudinal)
+                        cur_lane_idx = goal_lane
+                    theta_lane = self.road.network.get_lane(cur_lane_idx).heading_at(longitudinal)
                     # Integration der Geschwindigkeit zu globaler Position
                     longitudinal += v_in_lane_direction*t
                     lateral += v_orthogonal*t
-                    x, y = self.lane.position(longitudinal, lateral) 
+                    x, y = self.road.network.get_lane(cur_lane_idx).position(longitudinal, lateral)
                     # Trajektorie
                     trajectory.append((np.array([x,y]), theta_lane))
                     # Index erhoehen
                     idx += 1
-                    if abs(self.road.network.get_lane(goal_lane).position(longitudinal, 0) - self.lane.position(longitudinal, lateral)) <= 0.3:
+                    if np.linalg.norm(self.road.network.get_lane(goal_lane).position(longitudinal, 0)[1] - self.road.network.get_lane(cur_lane_idx).position(longitudinal, lateral)[1]) <= 0.3:
                         # wenn Abstand zwischen Mitte von Ziel-Lane und aktueller Position kleiner als 0.3m ist
                         break
                 if idx <= len(times)-1: # prueft ob Praediktionshorizont schon erreicht wurde
                     for t in times[idx:]:
                         longitudinal += self.speed*t # verwenden von skalarer Geschwindigkeit, da jetzt Mitte der Lane gefolgt wird
-                        x, y = self.lane.position(longitudinal, 0)
-                        theta_lane = self.lane.heading_at(longitudinal)
+                        x, y = self.road.network.get_lane(goal_lane).position(longitudinal, 0)
+                        theta_lane = self.road.network.get_lane(goal_lane).heading_at(longitudinal)
                         trajectory.append((np.array([x,y]), theta_lane))
 
-            elif theta1-theta2 < 0 and route[0][2] != (self.num_lanes-1): 
+            elif theta1-theta2 < 0 and goal_lane[2] <= (self.num_lanes-1):
                 """Spurwechsel nach rechts (pruefen ob Auto nach rechts will und ob es sich nicht auf rechts Spur befindet)"""
-                goal_lane = (route[0][0], route[0][1], route[0][2]+1)
                 longitudinal = coordinates[0] # longitudinaler "Fortschritt" auf Lane
                 lateral = coordinates[1] # Abweichung zu Lane Mitte
                 # Hilfgroessen fuer Spurwechsel
@@ -258,34 +264,40 @@ class ControlledVehicle(Vehicle):
                 v_in_lane_direction = np.dot(self.velocity, lane_direction) / np.linalg.norm(lane_direction) # Geschwindigkeit in Richtung der Spur
                 v_orthogonal = np.dot(self.velocity, other_lane_direction) / np.linalg.norm(other_lane_direction) # Geschwindigkeit in Richtung der anderen Spur bzw. orthogonal zu v_in_lane_direction
                 
-                for t in times: # oder while self.lane == get_lane(route[0])
+                cur_lane_idx = route[0]
+                for t in times:
                     if lateral >= self.lane.DEFAULT_WIDTH/2:
                         lateral = -self.lane.DEFAULT_WIDTH/2 # von lokalen lateralen KO der eigentlichen Spur zu denen der neuen Spur; ein bisschen unschoen aber sollte klappen
-                    theta_lane = self.lane.heading_at(longitudinal)
+                        cur_lane_idx = goal_lane
+                    theta_lane = self.road.network.get_lane(cur_lane_idx).heading_at(longitudinal)
                     # Integration der Geschwindigkeit zu globaler Position
                     longitudinal += v_in_lane_direction*t
                     lateral += v_orthogonal*t
-                    x, y = self.lane.position(longitudinal, lateral) 
+                    x, y = self.road.network.get_lane(cur_lane_idx).position(longitudinal, lateral)
                     # Trajektorie
                     trajectory.append((np.array([x,y]), theta_lane))
                     # Index erhoehen
                     idx += 1
-                    if abs(self.road.network.get_lane(goal_lane).position(longitudinal, 0) - self.lane.position(longitudinal, lateral)) <= 0.3:
+                    if np.linalg.norm(self.road.network.get_lane(goal_lane).position(longitudinal, 0)[1] - self.road.network.get_lane(cur_lane_idx).position(longitudinal, lateral)[1]) <= 0.3:
                         # wenn Abstand zwischen Mitte von Ziel-Lane und aktueller Position kleiner als 0.3m ist
                         break
                 if idx <= len(times)-1: # prueft ob Praediktionshorizont schon erreicht wurde
                     for t in times[idx:]:
                         longitudinal += self.speed*t # verwenden von skalarer Geschwindigkeit, da jetzt Mitte der Lane gefolgt wird
-                        x, y = self.lane.position(longitudinal, 0)
-                        theta_lane = self.lane.heading_at(longitudinal)
+                        x, y = self.road.network.get_lane(goal_lane).position(longitudinal, 0)
+                        theta_lane = self.road.network.get_lane(goal_lane).heading_at(longitudinal)
                         trajectory.append((np.array([x,y]), theta_lane))
 
         else: 
             """
             Falls kein Spurwechsel praediziert, dann auf Spur bleiben oder Route folgen.
             Der Methode "position_heading_along_route" wird als lateraler Parameter 0 uebergeben -> geht von Fahren in Spurmitte aus
+            (Springt demnach bei Spurwechsel unmittelbar auf andere Spur ohne Uebergang)
             """
-            trajectory = [self.road.network.position_heading_along_route(route, coordinates[0] + self.speed * t, 0) for t in times]
+            longitudinal = coordinates[0]
+            for t in times:
+                longitudinal += self.speed * t
+                trajectory.append(self.road.network.position_heading_along_route(route, longitudinal, 0))
 
         return tuple(zip(*trajectory))
                      

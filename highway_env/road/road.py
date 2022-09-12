@@ -38,7 +38,7 @@ class RoadNetwork(object):
 
     def get_lane(self, index: LaneIndex) -> AbstractLane:
         """
-        Get the lane geometry corresponding to a given index in the road network.
+        Get the lane (geometry) corresponding to a given index in the road network.
 
         :param index: a tuple (origin node, destination node, lane id on the road).
         :return: the corresponding lane geometry.
