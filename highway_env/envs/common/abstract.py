@@ -145,9 +145,14 @@ class AbstractEnv(gym.Env):
         ego_pos = self.vehicle.position # postion of ego-vehicle
         ego_vel = self.vehicle.velocity # velocity of ego-vehicle: [v_x, v_y]
         ego_lane_index = self.vehicle.lane_index # lane_index of ego-vehicle (_from, _to, _id)
-        ego_lane_index_id = self.vehicle.lane_index[2] # lane id of the lane where ego-vehicle is driving
+        ego_lane_index_id = ego_lane_index[2] # lane id of the lane where ego-vehicle is driving
         ego_width = self.vehicle.WIDTH
         ego_length = self.vehicle.LENGTH
+
+        # ego-vehicle Hilfsgroessen fuer d_min
+        r = np.sqrt(ego_width**2 + ego_length**2) / 2 # Laenge von Fahrzeugmitte bis Ecke
+        theta_0 = np.arcsin((ego_width/2) / r) # Winkel zwischen Fahrzeuglaengsachse und Ecke
+        theta = abs(self.vehicle.heading - self.vehicle.lane.heading_at(self.vehicle.lane_offset[0])) # zusaetzlicher Drehwinkel des Fahrzeugs abzueglich der Strassenkruemmung
 
         for vehicle in self.road.vehicles[1:]: # self.road.vehicles ist Liste mit allen erzeugten Fahzeugen; erster Listeneintrag ist ego-vehicle
             """
@@ -169,22 +174,23 @@ class AbstractEnv(gym.Env):
             # berechnen, mit welcher Geschwindigkeit ego-vehicle auf vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird
             # Skalarprodukt (np.dot) berechnet den Anteil der Geschwindigkeit der auf anderes vehicle gerichtet ist 
             # und Division normiert diesen Anteil auf den Abstand zum anderen vehicle
-            dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / ego_to_vehicle_distance
+            dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / ego_to_vehicle_distance # TODO: evtl v von anderem vehicle in Berechnung von dotd einbeziehen
             # if dotd <0, then we are getting closer to hazard
 
-            # compute the safety index for specific vehicle
+            # Mindestabstand d_min zwischen Fahrzeugen: abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht und von Gierwinkel des ego-vehicles
             if  ego_lane_index == vehicle.lane_index: # gilt nur wenn Fahrzeuge auf selber lane (nicht gegeben wenn ego-vehicle z.b. in Kreisverkehr faehrt)
-                ''' Mindestabstand d_min zwischen Fahrzeugen abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht und von Gierwinkel des ego-vehicles'''
+                # Abstand aufgrund von Fahrzeuglaenge
                 d_min = ego_length * 1.1
             else:
-                r = np.sqrt(ego_width**2 + ego_length**2) / 2 # Laenge von Fahrzeugmitte bis Ecke
-                theta_0 = np.arcsin((ego_width/2) / r) # Winkel zwischen Fahrzeuglaengsachse und Ecke
-                theta = abs(self.vehicle.heading - self.vehicle.lane.heading_at(self.vehicle.lane_offset[0])) # zusaetzlicher Drehwinkel des Fahrzeugs abzueglich der Strassenkruemmung
-                d_min = (np.sin(theta_0 + theta) * r + ego_width/2)* 1.1 # Abstand den ego-vehicle aufgrund von Gieren braucht + halbe Breite des anderen Fahrzeugs
+                # Abstand den ego-vehicle aufgrund von Gieren braucht + halbe Breite des anderen Fahrzeugs
+                d_min = (np.abs(np.sin(theta_0 + theta)) * r + ego_width/2)* 1.1
+
+            assert d_min>=0, "Error: d_min ist negativ (d_min = {})".format(d_min) # d_min muss positiv sein, sonst Fehler bei Gradientenberechnung der SI-Parameter in loss_si.backward()
 
             sis_info_tp1.append((d, dotd, d_min))
 
-            phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
+            # compute the safety index for specific vehicle
+            phi_tmp = self.sis_para_sigma + d_min**self.sis_para_n - d**self.sis_para_n - self.sis_para_k*dotd
             ''' phi = sigma + d_min^n - d^n - k*dotd '''
 
             # select the largest safety index
@@ -193,29 +199,32 @@ class AbstractEnv(gym.Env):
                 index = cnt
 
         if ego_lane_index_id == 0 or ego_lane_index_id == self.vehicle.num_lanes-1:
-            """
-            Safety Index zu Road Grenzen: berechnen falls ego-vehicle auf einer der aeusseren Lanes faehrt
-            """
-            cnt += 1 # wenn counter hoeher ist als Laenge der List self.road.vehicles dann ist Safety Index durch Fahrbahnrand definiert
+            """Notiz: wenn Auto nicht auf Road faehrt wird lane_index von am naechsten gelegener Lane ausgegeben, daher muss geprueft werden ob Auto auf einer Lane ist"""
+            if self.vehicle.on_road:
+                """Safety Index zu Road Grenzen: berechnen falls ego-vehicle auf einer der aeusseren Lanes faehrt"""
+                cnt += 1 # wenn counter hoeher ist als Laenge der List self.road.vehicles dann ist Safety Index durch Fahrbahnrand definiert
 
-            # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
-            d_min = np.sin(theta_0 + theta) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
+                # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
+                d_min = np.abs(np.sin(theta_0 + theta)) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
 
-            # Safety Lane Index
-            # d = distance (abhaengig davon ob ego-vehicle auf ganz linker oder rechter Spur ist)
-            if ego_lane_index_id == 0:
-                d = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] # parameter d from Safety Index; always positive
-                ego_to_vehicle_direction = np.array([0, -d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
-            else:
-                d = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1]
-                ego_to_vehicle_direction = np.array([0, d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke              
+                # Safety Lane Index
+                # d = distance (abhaengig davon ob ego-vehicle auf ganz linker oder rechter Spur ist)
+                if ego_lane_index_id == 0:
+                    d = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] # parameter d from Safety Index; always positive
+                    ego_to_rb_direction = np.array([0, -d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
+                else:
+                    d = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1]
+                    ego_to_rb_direction = np.array([0, d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke              
             
-            # dot d = velocity 
-            # TODO: evtl v von anderem vehicle in Berechnung von dotd einbeziehen            
-            dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / max(d, 0.001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
-            sis_info_tp1.append((d, dotd, d_min))
+                # dot d = velocity          
+                dotd = -np.dot(ego_vel, ego_to_rb_direction) / max(abs(d), 0.001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+                sis_info_tp1.append((d, dotd, d_min))
+            else:
+                """Safety Index falls ego-vehicle ausserhalb der Road ist: muss kuenstlich positiv werden (unsicher)"""
+                d, dotd, d_min = 0, 2, 2 # ergibt positiven SI
+                sis_info_tp1.append((d, dotd, d_min))
 
-            phi_tmp = self.sis_para_sigma + d_min ** self.sis_para_n - d ** self.sis_para_n - self.sis_para_k * dotd
+            phi_tmp = self.sis_para_sigma + d_min**self.sis_para_n - d**self.sis_para_n - self.sis_para_k*dotd
             ''' phi = sigma + d_min^n - d^n - k*dotd '''
 
             # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
@@ -224,6 +233,7 @@ class AbstractEnv(gym.Env):
                 index = cnt
 
         else:
+            """Safety Index falls ego-vehicle nicht auf einer der aeusseren Lanes faehrt: kuenstlich negativ (keine Gefahr)"""
             sis_info_tp1.append((10, 0, 2)) # irgendein (d,dotd,d_min) Paar, sodass safety index negativ wird und Laenge von sis_trans Liste immer gleich lang ist
 
         self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
