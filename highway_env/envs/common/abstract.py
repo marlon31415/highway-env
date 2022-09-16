@@ -221,7 +221,7 @@ class AbstractEnv(gym.Env):
                 sis_info_tp1.append((d, dotd, d_min))
             else:
                 """Safety Index falls ego-vehicle ausserhalb der Road ist: muss kuenstlich positiv werden (unsicher)"""
-                d, dotd, d_min = 0, 2, 2 # ergibt positiven SI
+                d, dotd, d_min = 0, -4, 2 # ergibt positiven SI
                 sis_info_tp1.append((d, dotd, d_min))
 
             phi_tmp = self.sis_para_sigma + d_min**self.sis_para_n - d**self.sis_para_n - self.sis_para_k*dotd
