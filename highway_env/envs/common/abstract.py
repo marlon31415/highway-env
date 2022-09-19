@@ -108,8 +108,8 @@ class AbstractEnv(gym.Env):
             "action": {
                 "type": "DiscreteMetaAction",
             },
-            "simulation_frequency": 15,  # [Hz]
-            "policy_frequency": 1,  # [Hz]
+            "simulation_frequency": 10,  # [Hz]; muss ganzzahliges Vielfaches der policy_frequency sein damit _simulate() dies sinnvoll umsetzt
+            "policy_frequency": 10,  # [Hz]
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
             "screen_width": 600,  # [px]
             "screen_height": 150,  # [px]
