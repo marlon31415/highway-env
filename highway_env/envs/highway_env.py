@@ -39,7 +39,7 @@ class HighwayEnv(AbstractEnv):
             "action": {
                 "type": "ContinuousAction",
             },
-            "lanes_count": 4,               # Anzahl Spuren
+            "lanes_count": 3,               # Anzahl Spuren
             "vehicles_count": 10,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
             "initial_lane_id": None,        # zufaellige initiale Spur fuer zu steuerndes vehicle
@@ -74,7 +74,7 @@ class HighwayEnv(AbstractEnv):
         """Create some new random vehicles of a given type, and add them on the road"""
         # definieren von welchen Typ die anderen Fahrzeuge sein sollen
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-        # Funktion wichtig, wenn config["controlled_vehicles"] > 1 -> Liste mit so vielen Eintraegen wie num_bins und jeder Eintrag ca. gleich groß.
+        # Funktion wichtig, wenn config["controlled_vehicles"] > 1 -> Liste mit so vielen Eintraegen wie num_bins und jeder Eintrag ca. gleich groß, z.B. [3,3,3] für 3 controlled vehicles mit 9 anderen Fahrzeugen
         # wenn num_bins gegeben (und =1 =nur ein "controlled_vehicle") dann ist Ergebnis von near_split eine Liste = ["vehicles_count"]
         other_per_controlled = near_split(self.config["vehicles_count"], num_bins=self.config["controlled_vehicles"])
 
@@ -88,7 +88,7 @@ class HighwayEnv(AbstractEnv):
             # zufaellige Daten zum erzeugen des vehicles
             vehicle = Vehicle.create_random(
                 self.road,
-                speed=None, # wenn None dann wird v zufaellig in Intervall [-Vehicle.DEFAULT_INITIAL_SPEEDS, Vehicle.DEFAULT_INITIAL_SPEEDS] gewaehlt
+                speed=25, # wenn None dann wird v abhängig von speed_limit oder zufaellig in Intervall [Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1]] gewaehlt
                 lane_id=self.config["initial_lane_id"],
                 spacing=self.config["ego_spacing"]
             )

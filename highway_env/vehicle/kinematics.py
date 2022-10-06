@@ -22,7 +22,7 @@ class Vehicle(RoadObject):
     """ Vehicle length [m] """
     WIDTH = 2.0
     """ Vehicle width [m] """
-    DEFAULT_INITIAL_SPEEDS = [23, 28]
+    DEFAULT_INITIAL_SPEEDS = [23, 28] # wird beim Erzeugen von vehicle verwendet, wenn kein speed vorgegeben und speed_limit=None
     """ Range for random initial speeds [m/s] """
     MAX_SPEED = 40.
     """ Maximum reachable speed [m/s] """
@@ -30,10 +30,12 @@ class Vehicle(RoadObject):
     """ Minimum reachable speed [m/s] """
     HISTORY_SIZE = 30
     """ Length of the vehicle state history, for trajectory display"""
-    CG_REAR = LENGTH/2
-    """Distance from Center of Gravity (CG) to Rear Axle"""
-    CG_FRONT = LENGTH/2
-    """Distance from Center of Gravity (CG) to Front Axle"""
+    L_AXLE = 3.0
+    """ wheel base (distance between front and rear axle) [m] """
+    CG_FRONT = L_AXLE*0.4
+    """ Distance from Center of Gravity (CG) to Front Axle [m] """
+    CG_REAR = L_AXLE-CG_FRONT
+    """ Distance from Center of Gravity (CG) to Rear Axle [m] """
 
     def __init__(self,
                  road: Road,
@@ -129,7 +131,7 @@ class Vehicle(RoadObject):
         # Lenkwinkel (input)
         delta_f = self.action['steering'] # Wert ist schon im Bereich STEERING_RANGE [rad] (vgl. ContinuousAction(ActionType))
         # Schwimmwinkel
-        self.beta = np.arctan(self.CG_REAR / self.LENGTH * np.tan(delta_f))
+        self.beta = np.arctan(self.CG_REAR / self.L_AXLE * np.tan(delta_f))
         # Geschwindigkeit in x- und y-Richtung
         v = self.speed * np.array([np.cos(self.heading + self.beta),
                                    np.sin(self.heading + self.beta)])
