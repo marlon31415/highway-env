@@ -187,15 +187,18 @@ class ControlledVehicle(Vehicle):
                 _to = self.road.np_random.randint(len(routes))
             self.route = routes[_to % len(routes)]
 
-    def predict_trajectory_constant_speed(self, times: np.ndarray) -> Tuple[List[np.ndarray], List[float]]:
+    def predict_trajectory_constant_speed(self, T, N) -> Tuple[List[np.ndarray], List[float]]:
         """
         Predict the future positions of the vehicle along its planned route, under constant speed.
         If a lane change is detected, the lane change is predicted with const. lateral and longitudinal speed till finished.
         After that the middle of the lane is followed with constant speed.
 
-        :param times: timesteps of prediction -> np.array([0.1, 0.1, 0.1, 0.1, ...])
+        :param T: timestep of prediction
+        :param N: prediction horizon
         :return: positions, headings as tuple -> ( (array([x0,y0]), array([x1,y1]), ..., array([xn,yn])), (heading1, heading2, ..., headingn) )
         """
+        times = np.repeat(T, N)
+
         threshold = 2/180*np.pi # Winkelunterschied zwischen Lane und Geschwindigkeit ab dem Spurwechsel in Praediktion der Trajektorie einfliessen soll
         coordinates = self.lane.local_coordinates(self.position) # lokale Lane-KO -> diese koennen einfach in globale umgerechnet werden
         route = self.route or [self.lane_index] # entweder Route (Liste mit Tuplen aus (from, to, id)) oder Liste mit aktuellem (from, to, id)
