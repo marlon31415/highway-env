@@ -42,7 +42,7 @@ class HighwayEnv(AbstractEnv):
             "lanes_count": 3,               # Anzahl Spuren
             "vehicles_count": 10,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
-            "initial_lane_id": None,        # zufaellige initiale Spur fuer zu steuerndes vehicle
+            "initial_lane_id": 2,           # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration": 40,                 # [s]
             "ego_spacing": 2,               # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
             "vehicles_density": 1,          # ?
