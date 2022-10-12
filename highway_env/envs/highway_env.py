@@ -88,7 +88,7 @@ class HighwayEnv(AbstractEnv):
             # zufaellige Daten zum erzeugen des vehicles
             vehicle = Vehicle.create_random(
                 self.road,
-                speed=25, # wenn None dann wird v abhängig von speed_limit oder zufaellig in Intervall [Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1]] gewaehlt
+                speed=25, # wenn None dann wird v abhaengig von speed_limit oder zufaellig in Intervall [Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1]] gewaehlt
                 lane_id=self.config["initial_lane_id"],
                 spacing=self.config["ego_spacing"]
             )
