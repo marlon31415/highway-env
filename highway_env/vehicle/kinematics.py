@@ -80,7 +80,7 @@ class Vehicle(RoadObject):
         lane = road.network.get_lane((_from, _to, _id))
         if speed is None:
             if lane.speed_limit is not None:
-                speed = road.np_random.uniform(0.75*lane.speed_limit, 0.92*lane.speed_limit)
+                speed = road.np_random.uniform(0.666*lane.speed_limit, 0.733*lane.speed_limit)
             else:
                 speed = road.np_random.uniform(Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1])
         default_spacing = 12+1.0*speed
