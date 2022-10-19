@@ -51,7 +51,7 @@ class IDMVehicle(ControlledVehicle):
                  heading: float = 0,
                  speed: float = 0,
                  target_lane_index: int = None,
-                 target_speed: float = None,
+                 target_speed: float = 17,
                  route: Route = None,
                  enable_lane_change: bool = True,
                  timer: float = None):

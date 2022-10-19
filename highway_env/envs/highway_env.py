@@ -42,7 +42,7 @@ class HighwayEnv(AbstractEnv):
             "lanes_count": 3,               # Anzahl Spuren
             "vehicles_count": 10,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
-            "initial_lane_id": 2,           # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
+            "initial_lane_id": None,           # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration": 40,                 # [s]
             "ego_spacing": 2,               # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
             "vehicles_density": 1,          # ?
@@ -52,8 +52,8 @@ class HighwayEnv(AbstractEnv):
             "lane_change_reward": 0,        # The reward received at each lane change action.
             "middle_of_lane_reward": 0.2,   # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "collision_trunc": False,        # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
-            "offroad_trunc": False,          # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "collision_trunc": False,       # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
+            "offroad_trunc": False,         # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_limit": 30,              # v_max auf Road
             "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
