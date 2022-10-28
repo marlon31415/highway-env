@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Optional
 from gym.envs.registration import register
 
 from highway_env import utils
@@ -40,12 +41,12 @@ class HighwayEnv(AbstractEnv):
                 "type": "ContinuousAction",
             },
             "lanes_count": 3,               # Anzahl Spuren
-            "vehicles_count": 10,           # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
+            "vehicles_count": 1,            # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles": 1,       # Anzahl der zu steuernden vehicles (1 ist standard)
-            "initial_lane_id": None,           # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
+            "initial_lane_id": 2,           # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration": 40,                 # [s]
             "ego_spacing": 2,               # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
-            "vehicles_density": 1,          # ?
+            "vehicles_density": 1,          # >1 verringert spacing beim Platzieren der vehicles
             "collision_reward": 0,          # default=-1 ; The reward received when colliding with a vehicle.
             "right_lane_reward": 0.3,       # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
             "high_speed_reward": 0.4,       # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
@@ -99,7 +100,11 @@ class HighwayEnv(AbstractEnv):
 
             for _ in range(others):
                 """erzeugt andere Verkehrsteilnehmer mit Methode create_random() von class Vehicle(RoadObject)"""
-                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
+                if _ == 0:
+                    # erstes Auto soll großen Abstand zu ego-vehicle haben, damit Initialtrajektorie feasible!
+                    vehicle = other_vehicles_type.create_random(self.road, spacing= 3) # spacing = 6
+                else:
+                    vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab Index 1)
 
@@ -164,26 +169,30 @@ class HighwayEnv(AbstractEnv):
             (self.config["collision_trunc"] and self.vehicle.crashed) or \
             (self.config["offroad_trunc"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
-    def _cost(self, action: int) -> float:
-        """The cost signal is the occurrence of unsafe states (collision and offroad)."""
-        cost = {}
-        cost['cost_crash'] = 0
-        cost['cost_road_boundary'] = 0
+    def _cost(self, action: Optional[int]) -> float:
+        """ 
+        cost ist 1, wenn Bedingung [phi(s') - max{phi(s)-eta, 0} <= 0] verletzt wird 
+        """
+        return int(self.delta_phi > 0)
+        #"""The cost signal is the occurrence of unsafe states (collision and offroad)."""
+        # cost = {}
+        # cost['cost_crash'] = 0
+        # cost['cost_road_boundary'] = 0
     
-        if self.vehicle.crashed:
-            cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen
-        if not self.vehicle.on_road:
-            cost['cost_road_boundary'] = 1
+        # if self.vehicle.crashed:
+        #     cost['cost_crash'] = 1 # TODO: ueber alle vehicles interieren, falls mehrere crashs vorliegen (_is_colliding(vehicle[i+1], ego-vehicle) und intersecting pruefen
+        # if not self.vehicle.on_road:
+        #     cost['cost_road_boundary'] = 1
 
-        sum_cost = 0
-        for k in list(cost.keys()):
-            # cost summieren
-            sum_cost += cost[k]
-        if sum_cost >= 1:
-            # cost kann maximal 1 sein
-            sum_cost = 1
+        # sum_cost = 0
+        # for k in list(cost.keys()):
+        #     # cost summieren
+        #     sum_cost += cost[k]
+        # if sum_cost >= 1:
+        #     # cost kann maximal 1 sein
+        #     sum_cost = 1
 
-        return sum_cost
+        # return sum_cost
 
      
 

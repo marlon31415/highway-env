@@ -81,7 +81,7 @@ class AbstractEnv(gym.Env):
         self.rendering_mode = 'human'
         self.enable_auto_render = False
 
-        self.reset() # wichtige funktion!!!
+        self.reset() # wichtige Funktion!!!
 
     @property
     def vehicle(self) -> Vehicle:
@@ -122,7 +122,7 @@ class AbstractEnv(gym.Env):
             "real_time_rendering": False
         }
 
-    #=================================================================
+    #===========================SIS===================================
     def set_sis_paras(self, sigma, k, n):
         """safety Index Parameter setzen"""
         self.sis_para_sigma = sigma
@@ -240,7 +240,7 @@ class AbstractEnv(gym.Env):
 
         return phi, index
         
-    #=================================================================
+    #===========================SIS===================================
 
     def seed(self, seed: int = None) -> List[int]:
         self.np_random, seed = seeding.np_random(seed)
@@ -312,26 +312,23 @@ class AbstractEnv(gym.Env):
         # sis
         old_phi = self.phi
         self.phi, veh_index = self.adaptive_safety_index()
-        if old_phi <= 0:
-            delta_phi = max(self.phi, 0)
-        else:
-            delta_phi = self.phi - old_phi
-
+        # cost = phi(s') - max{phi(s)-eta, 0}
+        self.delta_phi = self.phi - max(old_phi-0.01, 0)
         # update info dict
-        info.update({'delta_phi': delta_phi})
+        info.update({'delta_phi': self.delta_phi})
         info.update({'phi': self.phi})
         info.update(self.sis_info)
-        info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Saftey Index
+        info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Safety Index
         #=================================================================
 
         try:
-            info["cost"] = self._cost(action)
+            info["cost"] = self._cost()
         except NotImplementedError:
             pass
 
         return info
 
-    def _cost(self, action: Action) -> float:
+    def _cost(self, action: Optional[Action]) -> float:
         """
         A constraint metric, for budgeted MDP.
 
