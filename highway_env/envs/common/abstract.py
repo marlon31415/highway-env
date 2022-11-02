@@ -131,7 +131,8 @@ class AbstractEnv(gym.Env):
 
     def adaptive_safety_index(self):
         """
-        Safety Index berechnen: (safety index ist aktuell auf Umgebung highway_env ausgelegt)
+        Safety Index berechnen:
+        (safety index ist aktuell auf Umgebung highway_env ausgelegt)
         Der Safety Index betrachtet andere Fahrzeuge und Fahrbahnrand mit kleinstem lateralem Abstand zu Fahrzeugmitte
         """
         # initialize safety index
@@ -198,47 +199,40 @@ class AbstractEnv(gym.Env):
                 phi = phi_tmp
                 index = cnt
 
-        if ego_lane_index_id == 0 or ego_lane_index_id == self.vehicle.num_lanes-1:
-            """Notiz: wenn Auto nicht auf Road faehrt wird lane_index von am naechsten gelegener Lane ausgegeben, daher muss geprueft werden ob Auto auf einer Lane ist"""
-            if self.vehicle.on_road:
-                """Safety Index zu Road Grenzen: berechnen falls ego-vehicle auf einer der aeusseren Lanes faehrt"""
-                cnt += 1 # wenn counter hoeher ist als Laenge der List self.road.vehicles dann ist Safety Index durch Fahrbahnrand definiert
+        """
+        Safety Index zu linker und rechter Road Grenze berechnen
+        """
+        # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
+        d_min = np.abs(np.sin(theta_0 + theta)) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
+        # Safety Index zu linker Road Grenze
+        d_left = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] + ego_lane_index_id*self.vehicle.lane.DEFAULT_WIDTH # parameter d from Safety Index; positve when on road
+        if d_left >= 0: # vehicle auf road
+            ego_to_rb_direction_left = np.array([0, -d_left]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
+            dotd_left = -np.dot(ego_vel, ego_to_rb_direction_left) / max(np.linalg.norm(d), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+        else: # vehicle nicht mehr auf road (Geschwindigkeit wird nicht mehr in SI Berechnung aufgenommen)
+            dotd_left = 0 # kuenstlich auf 0 gesetzt; beschreibt nicht die Realitaet  
+        sis_info_tp1.append((d_left, dotd_left, d_min))
+        phi_tmp_left = self.sis_para_sigma + d_min**self.sis_para_n - (abs(d_left)**self.sis_para_n)*np.sign(d_left) - self.sis_para_k*dotd_left
+        # Safety Index zu rechter Road Grenze
+        d_right = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1] + (self.vehicle.num_lanes-1 - ego_lane_index_id)*self.vehicle.lane.DEFAULT_WIDTH
+        if d_right >= 0: # vehicle auf road
+            ego_to_rb_direction_right = np.array([0, d_right]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke  
+            dotd_right = -np.dot(ego_vel, ego_to_rb_direction_right) / max(np.linalg.norm(d), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+        else: # vehicle nicht mehr auf road (Geschwindigkeit wird nicht mehr in SI Berechnung aufgenommen)
+            dotd_right = 0
+        sis_info_tp1.append((d_right, dotd_right, d_min))
+        phi_tmp_right = self.sis_para_sigma + d_min**self.sis_para_n - (abs(d_right)**self.sis_para_n)*np.sign(d_right) - self.sis_para_k*dotd_right
 
-                # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
-                d_min = np.abs(np.sin(theta_0 + theta)) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
-
-                # Safety Lane Index
-                # d = distance (abhaengig davon ob ego-vehicle auf ganz linker oder rechter Spur ist)
-                if ego_lane_index_id == 0:
-                    d = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] # parameter d from Safety Index; always positive
-                    ego_to_rb_direction = np.array([0, -d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
-                else:
-                    d = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1]
-                    ego_to_rb_direction = np.array([0, d]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke              
-            
-                # dot d = velocity          
-                dotd = -np.dot(ego_vel, ego_to_rb_direction) / max(abs(d), 0.001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
-                sis_info_tp1.append((d, dotd, d_min))
-            else:
-                """Safety Index falls ego-vehicle ausserhalb der Road ist: muss kuenstlich positiv werden (unsicher)"""
-                d, dotd, d_min = 0, -4, 2 # ergibt positiven SI
-                sis_info_tp1.append((d, dotd, d_min))
-
-            phi_tmp = self.sis_para_sigma + d_min**self.sis_para_n - d**self.sis_para_n - self.sis_para_k*dotd
-            ''' phi = sigma + d_min^n - d^n - k*dotd '''
-
-            # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
-            if phi_tmp > phi:
-                phi = phi_tmp
-                index = cnt
-
-        else:
-            """Safety Index falls ego-vehicle nicht auf einer der aeusseren Lanes faehrt: kuenstlich negativ (keine Gefahr)"""
-            sis_info_tp1.append((10, 0, 2)) # irgendein (d,dotd,d_min) Paar, sodass safety index negativ wird und Laenge von sis_trans Liste immer gleich lang ist
+        phi_tmp = max(phi_tmp_left, phi_tmp_right)
+        # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
+        if phi_tmp > phi:
+            cnt += 1
+            phi = phi_tmp
+            index = cnt
 
         self.sis_info.update(dict(sis_data=sis_info_tp1, sis_trans=(sis_info_t, sis_info_tp1)))
 
-        return phi, index
+        return phi, index        
         
     #===========================SIS===================================
 
@@ -318,17 +312,17 @@ class AbstractEnv(gym.Env):
         info.update({'delta_phi': self.delta_phi})
         info.update({'phi': self.phi})
         info.update(self.sis_info)
-        info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Safety Index
+        info.update({'veh_index': veh_index}) # vehicle index fuer Fahrzeug mit groesstem Safety Index bzw. Road Grenze
         #=================================================================
 
         try:
-            info["cost"] = self._cost()
+            info["cost"] = self._cost(action)
         except NotImplementedError:
             pass
 
         return info
 
-    def _cost(self, action: Optional[Action]) -> float:
+    def _cost(self, action: Action) -> float:
         """
         A constraint metric, for budgeted MDP.
 

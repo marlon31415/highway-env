@@ -151,7 +151,7 @@ class HighwayEnv(AbstractEnv):
         The episode is over when time reaches the max. defined duration time
         
         TODO: als zusaetzliche Bedingung "kein crash in gesamter Laufzeit" hinzufuegen. 
-        Aber dann besteht Problem wann im RL-Training die Episode beenden soll. 
+        Aber dann besteht Problem wann im RL-Training die Episode beendent werden soll. 
         (?beenden wenn zeit abgelaufen; ziel erreicht wenn ohne crash, falls crash dann ziel nicht erreicht)
         """
         return self.time >= self.config['duration']
@@ -169,7 +169,7 @@ class HighwayEnv(AbstractEnv):
             (self.config["collision_trunc"] and self.vehicle.crashed) or \
             (self.config["offroad_trunc"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
 
-    def _cost(self, action: Optional[int]) -> float:
+    def _cost(self, action: int) -> float:
         """ 
         cost ist 1, wenn Bedingung [phi(s') - max{phi(s)-eta, 0} <= 0] verletzt wird 
         """
