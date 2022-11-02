@@ -53,8 +53,8 @@ class HighwayEnv(AbstractEnv):
             "lane_change_reward": 0,        # The reward received at each lane change action.
             "middle_of_lane_reward": 0.2,   # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range": [20, 30], # [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
-            "collision_trunc": False,       # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
-            "offroad_trunc": False,         # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "collision_trunc": True,        # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
+            "offroad_trunc": True,          # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_limit": 30,              # v_max auf Road
             "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
@@ -161,13 +161,17 @@ class HighwayEnv(AbstractEnv):
         whether a truncation condition outside the scope of the MDP is satisfied.
         Typically a timelimit, but could also be used to indicate agent physically going out of bounds.
         Can be used to end the episode prematurely before a `terminal state` is reached.
-
-        :return: False -> wird noch nicht verwendet daher return egal
         """
-        # wird aktuell nicht verwendet, da bei cost Verletzung nich gestoppt werden soll
+        on_road = self.vehicle.on_road
+        # Counter um aufeinanderfolgende Offroad Schritte zu zaehlen 
+        if on_road == False:
+            self.off_road_counter += 1 
+        else:
+            self.off_road_counter = 0
+
         return (self.time >= self.config['duration'] and self._is_terminal()==False) or \
             (self.config["collision_trunc"] and self.vehicle.crashed) or \
-            (self.config["offroad_trunc"] and not self.vehicle.on_road) # Bed. vehicle.on_road evtl anpassen da aktuell so definiert dass vehicle erst offroad ist wenn Fahrzeugmitte ausserhalb der lane
+            (self.config["offroad_trunc"] and self.off_road_counter >= 5)
 
     def _cost(self, action: int) -> float:
         """ 

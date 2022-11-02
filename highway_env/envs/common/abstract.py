@@ -63,6 +63,8 @@ class AbstractEnv(gym.Env):
         self.observation_space = None
         self.define_spaces()
 
+        self.off_road_counter = 0
+
     #=================================================================
         # Safety Index
         self.phi = None
@@ -342,6 +344,7 @@ class AbstractEnv(gym.Env):
         self.define_spaces()  # First, to set the controlled vehicle class depending on action space
         self.time = self.steps = 0
         self.done = False
+        self.off_road_counter = 0
 
         self._reset() # in subclass definiert: hier werden road und vehicles gesetzt
         self.define_spaces() # Second, to link the obs and actions to the vehicles once the scene is created
