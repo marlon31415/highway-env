@@ -70,6 +70,7 @@ class AbstractEnv(gym.Env):
         self.phi = None
         self.sis_info = dict()
         self.set_sis_paras(sigma=0.3, k=1, n=1) # Initialwerte wie bei SIS-Paper
+        self.eta = 0.01
     #=================================================================
 
         # Running
@@ -130,6 +131,9 @@ class AbstractEnv(gym.Env):
         self.sis_para_sigma = sigma
         self.sis_para_k = k
         self.sis_para_n = n
+
+    def set_slack_var(self, eta):
+        self.eta = eta
 
     def adaptive_safety_index(self):
         """
@@ -309,7 +313,7 @@ class AbstractEnv(gym.Env):
         old_phi = self.phi
         self.phi, veh_index = self.adaptive_safety_index()
         # cost = phi(s') - max{phi(s)-eta, 0}
-        self.delta_phi = self.phi - max(old_phi-0.01, 0)
+        self.delta_phi = self.phi - max(old_phi-self.eta, 0)
         # update info dict
         info.update({'delta_phi': self.delta_phi})
         info.update({'phi': self.phi})
