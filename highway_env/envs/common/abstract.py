@@ -135,6 +135,11 @@ class AbstractEnv(gym.Env):
     def set_slack_var(self, eta):
         self.eta = eta
 
+    # safety index: phi(s)
+    # falls Anpassung der Funktion erfolgt muss diese ebenfalls in RL-Algorithmus erfolgen
+    def safety_index(self, d_min, d, dotd):
+        return (self.sis_para_sigma + d_min)**self.sis_para_n - np.abs(d)**self.sis_para_n * np.sign(d) - self.sis_para_k*dotd
+
     def adaptive_safety_index(self):
         """
         Safety Index berechnen:
@@ -178,7 +183,7 @@ class AbstractEnv(gym.Env):
             d = ego_to_vehicle_distance # parameter d from Safety Index; always positive
 
             # dot d = velocity
-            # berechnen, mit welcher Geschwindigkeit ego-vehicle auf vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird
+            # berechnen, mit welcher Geschwindigkeit ego-vehicle auf anderes vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird
             # Skalarprodukt (np.dot) berechnet den Anteil der Geschwindigkeit der auf anderes vehicle gerichtet ist 
             # und Division normiert diesen Anteil auf den Abstand zum anderen vehicle
             dotd = -np.dot(ego_vel, ego_to_vehicle_direction) / ego_to_vehicle_distance # TODO: evtl v von anderem vehicle in Berechnung von dotd einbeziehen
@@ -187,17 +192,17 @@ class AbstractEnv(gym.Env):
             # Mindestabstand d_min zwischen Fahrzeugen: abhaengig davon ob Fahrzeuge auf derselben Spur oder nicht und von Gierwinkel des ego-vehicles
             if  ego_lane_index == vehicle.lane_index: # gilt nur wenn Fahrzeuge auf selber lane (nicht gegeben wenn ego-vehicle z.b. in Kreisverkehr faehrt)
                 # Abstand aufgrund von Fahrzeuglaenge
-                d_min = ego_length * 1.1
+                d_min = ego_length
             else:
                 # Abstand den ego-vehicle aufgrund von Gieren braucht + halbe Breite des anderen Fahrzeugs
-                d_min = (np.abs(np.sin(theta_0 + theta)) * r + ego_width/2)* 1.1
+                d_min = (np.abs(np.sin(theta_0 + theta)) * r + ego_width/2)
 
             assert d_min>=0, "Error: d_min ist negativ (d_min = {})".format(d_min) # d_min muss positiv sein, sonst Fehler bei Gradientenberechnung der SI-Parameter in loss_si.backward()
 
             sis_info_tp1.append((d, dotd, d_min))
 
             # compute the safety index for specific vehicle
-            phi_tmp = self.sis_para_sigma + d_min**self.sis_para_n - d**self.sis_para_n - self.sis_para_k*dotd
+            phi_tmp = self.safety_index(d_min, d, dotd)
             ''' phi = sigma + d_min^n - d^n - k*dotd '''
 
             # select the largest safety index
@@ -209,25 +214,25 @@ class AbstractEnv(gym.Env):
         Safety Index zu linker und rechter Road Grenze berechnen
         """
         # mindest Abstand abhaengig von Gierwinkel berechnen (bei Gieren sind Fahrzeugecken naeher an Fahrbahnrand)
-        d_min = np.abs(np.sin(theta_0 + theta)) * r * 1.1 # falls theta=0 dann Abstand nur ego_width/2
+        d_min = np.abs(np.sin(theta_0 + theta)) * r # falls theta=0 dann Abstand nur ego_width/2
         # Safety Index zu linker Road Grenze
         d_left = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset[1] + ego_lane_index_id*self.vehicle.lane.DEFAULT_WIDTH # parameter d from Safety Index; positve when on road
         if d_left >= 0: # vehicle auf road
             ego_to_rb_direction_left = np.array([0, -d_left]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke
-            dotd_left = -np.dot(ego_vel, ego_to_rb_direction_left) / max(np.linalg.norm(d), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+            dotd_left = -np.dot(ego_vel, ego_to_rb_direction_left) / max(np.linalg.norm(d_left), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
         else: # vehicle nicht mehr auf road (Geschwindigkeit wird nicht mehr in SI Berechnung aufgenommen)
             dotd_left = 0 # kuenstlich auf 0 gesetzt; beschreibt nicht die Realitaet  
         sis_info_tp1.append((d_left, dotd_left, d_min))
-        phi_tmp_left = self.sis_para_sigma + d_min**self.sis_para_n - (abs(d_left)**self.sis_para_n)*np.sign(d_left) - self.sis_para_k*dotd_left
+        phi_tmp_left = self.safety_index(d_min, d_left, dotd_left)
         # Safety Index zu rechter Road Grenze
         d_right = self.vehicle.lane.DEFAULT_WIDTH/2 - self.vehicle.lane_offset[1] + (self.vehicle.num_lanes-1 - ego_lane_index_id)*self.vehicle.lane.DEFAULT_WIDTH
         if d_right >= 0: # vehicle auf road
             ego_to_rb_direction_right = np.array([0, d_right]) # TODO: funtioniert so nur auf gerader/horizontaler Strecke  
-            dotd_right = -np.dot(ego_vel, ego_to_rb_direction_right) / max(np.linalg.norm(d), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
+            dotd_right = -np.dot(ego_vel, ego_to_rb_direction_right) / max(np.linalg.norm(d_right), 0.0001) # max() um Division durch Null zu verhindern (falls vehicle auf Begrenzungslinie)
         else: # vehicle nicht mehr auf road (Geschwindigkeit wird nicht mehr in SI Berechnung aufgenommen)
             dotd_right = 0
         sis_info_tp1.append((d_right, dotd_right, d_min))
-        phi_tmp_right = self.sis_para_sigma + d_min**self.sis_para_n - (abs(d_right)**self.sis_para_n)*np.sign(d_right) - self.sis_para_k*dotd_right
+        phi_tmp_right = self.safety_index(d_min, d_right, dotd_right)
 
         phi_tmp = max(phi_tmp_left, phi_tmp_right)
         # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
@@ -314,6 +319,7 @@ class AbstractEnv(gym.Env):
         self.phi, veh_index = self.adaptive_safety_index()
         # cost = phi(s') - max{phi(s)-eta, 0}
         self.delta_phi = self.phi - max(old_phi-self.eta, 0)
+        self.delta_phi = np.clip(self.delta_phi, -0.1, 100)   # negative Begrenzung, damit policy nicht versucht möglichst großen Abstand zu vorfahrenden Fahrzeugen zu halten; wird aber auch in Buffer gemacht
         # update info dict
         info.update({'delta_phi': self.delta_phi})
         info.update({'phi': self.phi})
