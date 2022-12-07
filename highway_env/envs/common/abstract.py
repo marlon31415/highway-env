@@ -180,7 +180,7 @@ class AbstractEnv(gym.Env):
             # d = distance
             ego_to_vehicle_direction = (veh_pos - ego_pos)
             ego_to_vehicle_distance = np.linalg.norm(ego_to_vehicle_direction) # distance from ego-vehicle to vehicle
-            d = ego_to_vehicle_distance 
+            d = ego_to_vehicle_distance # parameter d from Safety Index; always positive
 
             # dot d = velocity
             # berechnen, mit welcher Geschwindigkeit ego-vehicle auf anderes vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird

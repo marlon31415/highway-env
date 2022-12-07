@@ -98,10 +98,10 @@ class RoadObject(ABC):
                 self.hit = True
             if not other.solid:
                 other.hit = True
-        else:
-            # property crashed wieder auf False setzen wenn crash vorbei
-            # --> eigene Erweiterung des codes <--
-            self.crashed = False
+        # else:
+        #     # property crashed wieder auf False setzen wenn crash vorbei
+        #     # --> eigene Erweiterung des codes <--
+        #     self.crashed = False
 
     def _is_colliding(self, other, dt):
         # Fast spherical pre-check
