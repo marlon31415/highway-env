@@ -31,7 +31,7 @@ class HighwayEnv(AbstractEnv):
             "observation": {
                 "type": "Kinematics",           # types aus 'highway_env\envs\common\observation'
                 "features": ["presence", "x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
-                "vehicles_count":     5,        # Number of observed vehicles (incl. ego-vehicle)
+                "vehicles_count":     6,        # Number of observed vehicles (incl. ego-vehicle)
                 "observe_intentions": False,    # False = standard
                 "absolute":           True,     # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
                 "normalize":          False,    # normalsiert Observation zwischen -1 und 1; True = standard
@@ -41,7 +41,7 @@ class HighwayEnv(AbstractEnv):
                 "type": "ContinuousAction",
             },
             "lanes_count":           3,       # Anzahl Spuren
-            "vehicles_count":        10,      # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
+            "vehicles_count":        15,      # Anzahl Fahrzeuge, die auf der Road erzeugt werden (ohne ego-vehicle)
             "controlled_vehicles":   1,       # Anzahl der zu steuernden vehicles (1 ist standard)
             "initial_lane_id":       None,    # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration":              40,      # [s]
@@ -75,38 +75,67 @@ class HighwayEnv(AbstractEnv):
         """Create some new random vehicles of a given type, and add them on the road"""
         # definieren von welchen Typ die anderen Fahrzeuge sein sollen
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-        # Funktion wichtig, wenn config["controlled_vehicles"] > 1 -> Liste mit so vielen Eintraegen wie num_bins und jeder Eintrag ca. gleich groß, z.B. [3,3,3] für 3 controlled vehicles mit 9 anderen Fahrzeugen
-        # wenn num_bins gegeben (und =1 =nur ein "controlled_vehicle") dann ist Ergebnis von near_split eine Liste = ["vehicles_count"]
-        other_per_controlled = near_split(self.config["vehicles_count"], num_bins=self.config["controlled_vehicles"])
-
+        
         # Wird Liste der Laenge config["controlled_vehicles"] mit einem ego-vehicle in jedem Eintrag.
         # Enthaelt nur ein ego-vehicle wenn config["controlled_vehicles"]=1 
         self.controlled_vehicles = []
+        
+        others = self.config["vehicles_count"]
+        others_before_ego = int(np.round(np.random.uniform(1/4,1/3)*others))
+        others_after_ego  = others - others_before_ego
 
-        # for-for-Schleife erzeugt fuer jedes ego-vehicle eine entsprechende Anzahl an fremden Verkehrsteilnehmern (ca. gleich aufgeteilt)
-        for others in other_per_controlled:
-            """erzeugt Liste mit ego-vehicles und setzt diese auf die Road"""
-            # zufaellige Daten zum erzeugen des vehicles
-            vehicle = Vehicle.create_random(
+        for _ in range(others_before_ego):
+                """ Autos erzeugen, die weiter links als ego-vehicle sind """
+                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(23,25))
+                vehicle.randomize_behavior()
+                self.road.vehicles.append(vehicle)
+        
+        # ego-vehicle erzeugen
+        vehicle = Vehicle.create_random(
                 self.road,
                 speed=self.road.np_random.uniform(20,30), # wenn None dann wird v abhaengig von speed_limit oder zufaellig in Intervall [Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1]] gewaehlt
                 lane_id=self.config["initial_lane_id"],
-                spacing=self.config["ego_spacing"]
+                spacing=self.config["ego_spacing"] / self.config["vehicles_density"]
             )
-            # vehicle class wird mit vorher generierten Daten aufgerufen -> es wird vehicle erzeugt
-            vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed, self.config["prediction_type"])
-            self.controlled_vehicles.append(vehicle)
-            self.road.vehicles.append(vehicle) # vehicles-liste in Road-klasse
-
-            for _ in range(others):
-                """erzeugt andere Verkehrsteilnehmer mit Methode create_random() von class Vehicle(RoadObject)"""
-                if _ == 0:
-                    # erstes Auto soll großen Abstand zu ego-vehicle haben, damit Initialtrajektorie feasible!
-                    vehicle = other_vehicles_type.create_random(self.road, spacing=0.5) # spacing = 6
-                else:
-                    vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
+        # vehicle class wird mit vorher generierten Daten aufgerufen -> es wird vehicle erzeugt
+        vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed, self.config["prediction_type"])
+        self.controlled_vehicles.append(vehicle)
+        self.road.vehicles.insert(0, vehicle) # vehicles-liste in Road-klasse
+        
+        for _ in range(others_after_ego):
+                """ Autos erzeugen, die weiter rechts als ego-vehicle sind """
+                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(18,22))
                 vehicle.randomize_behavior()
-                self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab Index 1)
+                self.road.vehicles.append(vehicle)        
+        
+        # # Funktion wichtig, wenn config["controlled_vehicles"] > 1 -> Liste mit so vielen Eintraegen wie num_bins und jeder Eintrag ca. gleich groß, z.B. [3,3,3] für 3 controlled vehicles mit 9 anderen Fahrzeugen
+        # # wenn num_bins gegeben (und =1 =nur ein "controlled_vehicle") dann ist Ergebnis von near_split eine Liste = ["vehicles_count"]
+        # other_per_controlled = near_split(self.config["vehicles_count"], num_bins=self.config["controlled_vehicles"])
+
+        # # for-for-Schleife erzeugt fuer jedes ego-vehicle eine entsprechende Anzahl an fremden Verkehrsteilnehmern (ca. gleich aufgeteilt)
+        # for others in other_per_controlled:
+        #     """erzeugt Liste mit ego-vehicles und setzt diese auf die Road"""
+        #     # zufaellige Daten zum erzeugen des vehicles
+        #     vehicle = Vehicle.create_random(
+        #         self.road,
+        #         speed=self.road.np_random.uniform(20,30), # wenn None dann wird v abhaengig von speed_limit oder zufaellig in Intervall [Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1]] gewaehlt
+        #         lane_id=self.config["initial_lane_id"],
+        #         spacing=self.config["ego_spacing"]
+        #     )
+        #     # vehicle class wird mit vorher generierten Daten aufgerufen -> es wird vehicle erzeugt
+        #     vehicle = self.action_type.vehicle_class(self.road, vehicle.position, vehicle.heading, vehicle.speed, self.config["prediction_type"])
+        #     self.controlled_vehicles.append(vehicle)
+        #     self.road.vehicles.append(vehicle) # vehicles-liste in Road-klasse
+
+        #     for _ in range(others):
+        #         """erzeugt andere Verkehrsteilnehmer mit Methode create_random() von class Vehicle(RoadObject)"""
+        #         if _ == 0:
+        #             # erstes Auto soll großen Abstand zu ego-vehicle haben, damit Initialtrajektorie feasible!
+        #             vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"]) # spacing = 6
+        #         else:
+        #             vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"])
+        #         vehicle.randomize_behavior()
+        #         self.road.vehicles.append(vehicle) # self.road.vehicles[1:] sind fremde Autos (alle ab Index 1)
 
     def _reward(self, action: Action) -> float:
         """
@@ -134,17 +163,20 @@ class HighwayEnv(AbstractEnv):
         # + high speed reward: nur zwischen definiertem Bereich gibt es reward \
         # + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
         reward = \
-            + self.config["collision_reward"]      * self.vehicle.crashed \
-            + self.config["right_lane_reward"]     * 1/max(num_lanes - 1, 1)**2 * lane**2\
-            + self.config["high_speed_reward"]     * np.clip(scaled_speed, 0, 1) \
-            + self.config["middle_of_lane_reward"] * (1-abs(self.vehicle.lane_offset[1])/(lane_width/2))
+            - self.config["right_lane_reward"] * (self.vehicle.target_lane_offset[1])**2 \
+            - self.config["high_speed_reward"] * (25 - forward_speed)**2
+            # + self.config["collision_reward"]      * self.vehicle.crashed \
+            # + self.config["right_lane_reward"]     * 1/max(num_lanes - 1, 1)**2 * lane**2\
+            # + self.config["high_speed_reward"]     * np.clip(scaled_speed, 0, 1) \
+            # + self.config["middle_of_lane_reward"] * (1-abs(self.vehicle.lane_offset[1])/(lane_width/2))
         #    + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
+        reward /= 100
         # reward auf Intervall [0,1] normalisieren
-        reward = utils.lmap(reward,
-                          [self.config["collision_reward"],
-                           self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
-                          [0, 1]) 
-        reward = 0 if forward_speed < self.config["reward_speed_range"][0] else reward
+        # reward = utils.lmap(reward,
+        #                   [self.config["collision_reward"],
+        #                    self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
+        #                   [0, 1]) 
+        # reward = 0 if forward_speed < self.config["reward_speed_range"][0] else reward
         # reward = 0 if not self.vehicle.on_road else reward
         return reward
 

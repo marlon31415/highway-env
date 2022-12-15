@@ -149,7 +149,7 @@ class KinematicObservation(ObservationType):
                  order: str = "sorted",
                  normalize: bool = True,
                  clip: bool = True,
-                 see_behind: bool = False,
+                 see_behind: bool = True,           # urspruenglich False
                  observe_intentions: bool = False,
                  add_indiv_ego_obs: bool = False,
                  **kwargs: dict) -> None:
