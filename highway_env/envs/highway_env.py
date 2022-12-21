@@ -46,12 +46,12 @@ class HighwayEnv(AbstractEnv):
             "initial_lane_id":       None,    # wenn None: zufaellige initiale Spur fuer zu steuerndes vehicle
             "duration":              40,      # [s]
             "ego_spacing":           1,       # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
-            "vehicles_density":      2,       # >1 verringert spacing beim Platzieren der vehicles
+            "vehicles_density":      1.5,       # >1 verringert spacing beim Platzieren der vehicles
             "collision_reward":      0,       # default=-1 ; The reward received when colliding with a vehicle.
             "right_lane_reward":     0.1,     # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
-            "high_speed_reward":     0.7,     # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
+            "high_speed_reward":     0.9,     # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
             "lane_change_reward":    0,       # The reward received at each lane change action.
-            "middle_of_lane_reward": 0.2,     # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
+            "middle_of_lane_reward": 0.,     # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range":    [20, 30],# [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
             "collision_trunc":       True,    # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
             "offroad_trunc":         True,    # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
@@ -170,7 +170,7 @@ class HighwayEnv(AbstractEnv):
             # + self.config["high_speed_reward"]     * np.clip(scaled_speed, 0, 1) \
             # + self.config["middle_of_lane_reward"] * (1-abs(self.vehicle.lane_offset[1])/(lane_width/2))
         #    + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
-        reward /= 100
+        reward /= 10
         # reward auf Intervall [0,1] normalisieren
         # reward = utils.lmap(reward,
         #                   [self.config["collision_reward"],

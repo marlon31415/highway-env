@@ -69,7 +69,7 @@ class AbstractEnv(gym.Env):
         # Safety Index
         self.phi = None
         self.sis_info = dict()
-        self.set_sis_paras(sigma=0.3, k=1, n=1) # Initialwerte wie bei SIS-Paper
+        self.set_sis_paras(sigma=0.3, k=1.3, n=1.6) # Initialwerte wie bei SIS-Paper
         self.eta = 0.01
     #=================================================================
 
