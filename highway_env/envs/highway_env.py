@@ -170,7 +170,7 @@ class HighwayEnv(AbstractEnv):
             # + self.config["high_speed_reward"]     * np.clip(scaled_speed, 0, 1) \
             # + self.config["middle_of_lane_reward"] * (1-abs(self.vehicle.lane_offset[1])/(lane_width/2))
         #    + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
-        reward /= 10
+        reward /= 100
         # reward auf Intervall [0,1] normalisieren
         # reward = utils.lmap(reward,
         #                   [self.config["collision_reward"],
@@ -182,19 +182,8 @@ class HighwayEnv(AbstractEnv):
 
     def _is_terminal(self) -> bool:
         """
-        The episode is over when time reaches the max. defined duration time
-        
-        TODO: als zusaetzliche Bedingung "kein crash in gesamter Laufzeit" hinzufuegen. 
-        Aber dann besteht Problem wann im RL-Training die Episode beendent werden soll. 
-        (?beenden wenn zeit abgelaufen; ziel erreicht wenn ohne crash, falls crash dann ziel nicht erreicht)
-        """
-        return self.time >= self.config['duration']
-
-    def _is_truncation(self) -> bool:
-        """
-        whether a truncation condition outside the scope of the MDP is satisfied.
-        Typically a timelimit, but could also be used to indicate agent physically going out of bounds.
-        Can be used to end the episode prematurely before a `terminal state` is reached.
+        The episode is over when ego-vehicle crashes or drives offroad
+        TODO: define a goal -> terminates environment too
         """
         on_road = self.vehicle.on_road
         # Counter um aufeinanderfolgende Offroad Schritte zu zaehlen 
@@ -203,9 +192,17 @@ class HighwayEnv(AbstractEnv):
         else:
             self.off_road_counter = 0
 
-        return (self.time >= self.config['duration'] and self._is_terminal()==False) or \
-            (self.config["collision_trunc"] and self.vehicle.crashed) or \
-            (self.config["offroad_trunc"] and self.off_road_counter >= 5)
+        return (self.config["collision_trunc"] and self.vehicle.crashed) or \
+               (self.config["offroad_trunc"]   and self.off_road_counter >= 5)
+
+    def _is_truncation(self) -> bool:
+        """
+        whether a truncation condition outside the scope of the MDP is satisfied.
+        Typically a timelimit, but could also be used to indicate agent physically going out of bounds.
+        Can be used to end the episode prematurely before a `terminal state` is reached.
+        """
+        return self.time >= self.config['duration']
+            
 
     def _cost(self, action: int) -> float:
         """ 
