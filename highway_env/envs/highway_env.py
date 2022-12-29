@@ -48,8 +48,8 @@ class HighwayEnv(AbstractEnv):
             "ego_spacing":           1,       # mind. Abstand zu ego-vehicle / ratio of spacing to the front vehicle: 12+1.0*speed * spacing
             "vehicles_density":      1.5,       # >1 verringert spacing beim Platzieren der vehicles
             "collision_reward":      0,       # default=-1 ; The reward received when colliding with a vehicle.
-            "right_lane_reward":     0.1,     # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
-            "high_speed_reward":     0.9,     # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
+            "right_lane_reward":     0,     # The reward received when driving on the right-most lanes, linearly mapped to zero for other lanes.
+            "high_speed_reward":     1,     # The reward received when driving at full speed, linearly mapped to zero for lower speeds according to config["reward_speed_range"].
             "lane_change_reward":    0,       # The reward received at each lane change action.
             "middle_of_lane_reward": 0.,     # The reward received when driving in the middle of the lane (abs(vehicle.lane_offset[1]) < value)
             "reward_speed_range":    [20, 30],# [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
@@ -154,28 +154,35 @@ class HighwayEnv(AbstractEnv):
         forward_speed = self.vehicle.velocity[0] # berechnet mit Gierwinkel theta und Schwimmwinkel beta
         scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
         
-        # Abstand zur Mitte bis zu dem es noch reward gibt
-        lat_reward = 0.25  # wenn lat_reward veraendert wird muss Vorfaktor veraendert werden!!!
-
-        """reward berechnen"""
-        # collision reward: bei crash mit anderem Fahrzeug \
-        # + right lane reward: f(x) = 1 / (num_lanes-1)^2 * lane^2 -> diskrete Funktion; auf lane 0 immer Null und auf rechter lane (num_lanes-1) immer 1; dazwischen quadratisch \
-        # + high speed reward: nur zwischen definiertem Bereich gibt es reward \
-        # + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
+        """reward berechnen: aehnlich wie in MPC"""
+        speed_goal = 25
+        lane_goal  = 8
+        reward_scale = 40
+        
         reward = \
             - self.config["right_lane_reward"] * (self.vehicle.target_lane_offset[1])**2 \
-            - self.config["high_speed_reward"] * (25 - forward_speed)**2
+            - self.config["high_speed_reward"] * (speed_goal - forward_speed)**2
+            
+        reward /= reward_scale # skalieren damit reward nicht zu groß
+        offset = ( self.config["right_lane_reward"] * (lane_goal+2)**2 + self.config["high_speed_reward"] * speed_goal**2 ) / reward_scale # maximaler negativer reward
+        reward += offset                                             # reward von [-offset,0] auf [0,offset] transformieren
+        reward = np.exp(reward) - 1                                  # reward exponentiell werten (reward=0 ergibt wieder 0 durch die -1)
+        reward = utils.lmap(reward, [0, (np.exp(offset)-1)], [0, 1]) # reward auf Intervall [0,1] normalisieren 
+
+        """alternativer reward: wie urspruenglich vorgeschlagen"""
+        ## collision reward: bei crash mit anderem Fahrzeug \
+        ## + right lane reward: f(x) = 1 / (num_lanes-1)^2 * lane^2 -> diskrete Funktion; auf lane 0 immer Null und auf rechter lane (num_lanes-1) immer 1; dazwischen quadratisch \
+        ## + high speed reward: nur zwischen definiertem Bereich gibt es reward \
+        ## + middle of lane reward: reward nur wenn ego-vehicle bestimmten lateralen Abstand zur Spurmitte hat: kontinuierliche quadratische Funktion f(x)=16*(x-0.25)^2 -> f(0)=1, f(0.25)=0  
+        ## Abstand zur Mitte bis zu dem es noch reward gibt
+        # lat_reward = 0.25  # wenn lat_reward veraendert wird muss Vorfaktor veraendert werden!!!
+        # reward = \
             # + self.config["collision_reward"]      * self.vehicle.crashed \
             # + self.config["right_lane_reward"]     * 1/max(num_lanes - 1, 1)**2 * lane**2\
             # + self.config["high_speed_reward"]     * np.clip(scaled_speed, 0, 1) \
             # + self.config["middle_of_lane_reward"] * (1-abs(self.vehicle.lane_offset[1])/(lane_width/2))
-        #    + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
-        reward /= 100
-        # reward auf Intervall [0,1] normalisieren
-        # reward = utils.lmap(reward,
-        #                   [self.config["collision_reward"],
-        #                    self.config["high_speed_reward"] + self.config["right_lane_reward"] + self.config["middle_of_lane_reward"]],
-        #                   [0, 1]) 
+            # + self.config["middle_of_lane_reward"] * np.clip(16*(np.clip(abs(self.vehicle.lane_offset[1]), 0, lat_reward)-lat_reward)**2, 0, 1) 
+        # reward = utils.lmap(reward, [self.config["collision_reward"], self.config["right_lane_reward"]+self.config["high_speed_reward"]+self.config["middle_of_lane_reward"]], [0, 1]) 
         # reward = 0 if forward_speed < self.config["reward_speed_range"][0] else reward
         # reward = 0 if not self.vehicle.on_road else reward
         return reward
