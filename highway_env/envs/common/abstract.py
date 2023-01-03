@@ -155,8 +155,8 @@ class AbstractEnv(gym.Env):
         cnt = 0 # Erklaerung: cnt = 1 -> vehicle mit Index 1 in Liste self.road.vehicles (erstes nicht ego-vehicle Fahrzeug) 
 
         # Groessen fuer collision constraints
-        d_center  = 1.3                 # Abstand Kreise zu Mittelpunkt des Autos
-        r_circle  = 1.5                 # Kreisradius
+        d_center  = 1.5                 # Abstand Kreise zu Mittelpunkt des Autos
+        r_circle  = 1.4                 # Kreisradius
         d_min_veh = 2*r_circle          # Mindestabstand zwischen 2 Kreismittelpunkten
 
         # get data of ego-vehicle
@@ -202,7 +202,8 @@ class AbstractEnv(gym.Env):
             # Mindestabstand als 4x1 Array (passend zu anderen Groessen)
             d_min = np.repeat(d_min_veh, 4)
 
-            sis_info_tp1.append((d.tolist(), dotd.tolist(), d_min.tolist()))
+            for i in range(4):
+                sis_info_tp1.append((d[i], dotd[i], d_min_veh)) # d.tolist(), dotd.tolist(), d_min.tolist()
 
             # compute the safety index for specific vehicle
             phi_tmp = self.safety_index(d_min, d, dotd)
@@ -217,7 +218,7 @@ class AbstractEnv(gym.Env):
         Safety Index zu linker Road Grenze berechnen
         """
         # Mindestabstand von Mittelpunkt Kreis bis Road Boundary
-        d_min_boundary = r_circle
+        d_min_boundary = -0.2 - 0.3 # r_circle - 0.3
         
         d_left1 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_r)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH # parameter d from Safety Index; positve when on road
         d_left2 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_f)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH
@@ -258,7 +259,7 @@ class AbstractEnv(gym.Env):
         phi_tmp_right1 = self.safety_index(d_min_boundary, d_right1, dotd_right1)
         phi_tmp_right2 = self.safety_index(d_min_boundary, d_right2, dotd_right2)
 
-        phi_tmp = max(phi_tmp_left1, phi_tmp_left2, phi_tmp_right1, phi_tmp_right2)
+        phi_tmp = np.max([phi_tmp_left1, phi_tmp_left2, phi_tmp_right1, phi_tmp_right2])
         # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen
         if phi_tmp > phi:
             cnt += 1
