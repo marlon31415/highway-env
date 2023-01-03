@@ -295,6 +295,10 @@ class Vehicle(RoadObject):
         return (positions, headings)
 
     @property
+    def direction(self) -> np.ndarray:
+        return np.array([np.cos(self.heading), np.sin(self.heading)])
+
+    @property
     def v_direction(self) -> np.ndarray:
         return np.array([np.cos(self.heading + self.beta), np.sin(self.heading + self.beta)])
 
@@ -323,6 +327,15 @@ class Vehicle(RoadObject):
     def lane_offset(self) -> np.ndarray:
         if self.lane is not None:
             long, lat = self.lane.local_coordinates(self.position)
+            ang = self.lane.local_angle(self.heading, long)
+            return np.array([long, lat, ang])
+        else:
+            return np.zeros((3,))
+    
+    def lane_offset_method(self, pos):
+        # methode zur property lane_offset fuer SI Berechnung
+        if self.lane is not None:
+            long, lat = self.lane.local_coordinates(pos)
             ang = self.lane.local_angle(self.heading, long)
             return np.array([long, lat, ang])
         else:
