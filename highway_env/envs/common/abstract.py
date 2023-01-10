@@ -181,8 +181,12 @@ class AbstractEnv(gym.Env):
             # get data of other vehicle
             veh_dir   = vehicle.direction          # np.array([cos(heading), sin(heading)])
             veh_pos   = vehicle.position           # position of other vehicle
+            veh_vel   = vehicle.velocity           # velocity of vehicle
             veh_pos_r = veh_pos - d_center*veh_dir # Mittelpunkt Kreis hinten
             veh_pos_f = veh_pos + d_center*veh_dir # Mittelpunkt Kreis vorne
+
+            # Relativgeschwindigkeit
+            delta_v = ego_vel - veh_vel
 
             # Safety Index Parameter d: distance (always positive)
             ego_to_vehicle_direction = np.array([ego_pos_r-veh_pos_r,
@@ -193,11 +197,10 @@ class AbstractEnv(gym.Env):
             d = ego_to_vehicle_distance
 
             # Safety Index Parameter dotd: time derivative of d
-            # berechnen, mit welcher Geschwindigkeit ego-vehicle auf anderes vehicle zufaehrt, wenn vehicle als fester Punkt betrachtet wird
-            # Skalarprodukt (np.dot) berechnet den Anteil der Geschwindigkeit der auf anderes vehicle gerichtet ist 
-            # und Division normiert diesen Anteil auf den Abstand zum anderen vehicle
+            # Geschwindigkeit mit der ego-vehicle auf anderes vehicle zufaehrt
+            # Annahme: v_Fahrzeugmitte = v_Mittelpunkt_Kreis1 = v_Mittelpunkt_Kreis2
             # if dotd <0, then we are getting closer to hazard
-            dotd = ego_vel @ ego_to_vehicle_direction.transpose() / d
+            dotd = delta_v @ ego_to_vehicle_direction.transpose() / d
             
             # Mindestabstand als 4x1 Array (passend zu anderen Groessen)
             d_min = np.repeat(d_min_veh, 4)
@@ -218,7 +221,7 @@ class AbstractEnv(gym.Env):
         Safety Index zu linker Road Grenze berechnen
         """
         # Mindestabstand von Mittelpunkt Kreis bis Road Boundary
-        d_min_boundary = -0.2 - 0.3 # r_circle - 0.3
+        d_min_boundary = 0 # r_circle - 0.3
         
         d_left1 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_r)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH # parameter d from Safety Index; positve when on road
         d_left2 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_f)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH
@@ -258,6 +261,8 @@ class AbstractEnv(gym.Env):
         sis_info_tp1.append((d_right2, dotd_right2, d_min_boundary))
         phi_tmp_right1 = self.safety_index(d_min_boundary, d_right1, dotd_right1)
         phi_tmp_right2 = self.safety_index(d_min_boundary, d_right2, dotd_right2)
+
+        # print(phi_tmp_left1, phi_tmp_left2, phi_tmp_right1, phi_tmp_right2)
 
         phi_tmp = np.max([phi_tmp_left1, phi_tmp_left2, phi_tmp_right1, phi_tmp_right2])
         # pruefen ob Safety Index zu Road Grenzen groesser ist als groesster SI zu anderen Fahrzeugen

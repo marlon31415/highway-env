@@ -223,7 +223,7 @@ class KinematicObservation(ObservationType):
         # Add nearby traffic
         # liste aus den Fahrzeugen, die dem ego-vehicle am naechsten sind
         close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
-                                                         self.env.PERCEPTION_DISTANCE, # 5*max_speed = 200m
+                                                         self.env.PERCEPTION_DISTANCE, # 5*vehicle.max_speed = 200m
                                                          count=self.vehicles_count - 1,
                                                          see_behind=self.see_behind,
                                                          sort=self.order == "sorted")
@@ -237,9 +237,12 @@ class KinematicObservation(ObservationType):
         # Normalize and clip
         if self.normalize:
             df = self.normalize_obs(df)
-        # Fill missing rows with zeros
+        # Fill missing rows with zeros; Change: fill missing rows with cars with same v as ego-vehicle and perception_distance away
         if df.shape[0] < self.vehicles_count:
+            missing = self.vehicles_count - df.shape[0]
             rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
+            for i in range(missing):
+                rows[i] = np.array([self.observer_vehicle.position[0]+self.env.PERCEPTION_DISTANCE, self.observer_vehicle.position[1], self.observer_vehicle.velocity[0], self.observer_vehicle.velocity[1]])
             df = pd.concat([df, pd.DataFrame(data=rows, columns=self.features)], ignore_index=True)
         # Reorder
         df = df[self.features]
@@ -253,10 +256,8 @@ class KinematicObservation(ObservationType):
             """
             zusaetzliche ego observations:
                 - Offset zur Mitte der target Lane
-                - Offset zur Mitte der aktuellen Lane
                 - Gierwinkel
-                - gibt es Spur rechts von aktueller Lane? -> Ja: 1, Nein: 0
-                - gibt es Spur links von aktueller Lane? -> Ja: 1, Nein: 0
+
             
             Anzahl der zusaetzlichen observations DARF Anzahl features NICHT UEBERSCHREITEN, da
             sonst Inkompatibilitaet mit np.array besteht (Loesung: nur 1d Array fuer ObservationSpace erstellen)
@@ -268,23 +269,26 @@ class KinematicObservation(ObservationType):
             left_road_boundary  = -4/2
 
             add_ego_obs1 = np.array([self.observer_vehicle.target_lane_offset[1], \
-                self.observer_vehicle.lane_offset[1], \
+                right_road_boundary-y, \
+                left_road_boundary-y, \
                 self.observer_vehicle.heading, \
-                1 if (self.observer_vehicle.num_lanes-1 != self.observer_vehicle.lane_index[2]) else 0, \
-                1 if (0 != self.observer_vehicle.lane_index[2]) else 0])
-            add_ego_obs2 = np.array([right_road_boundary-y, left_road_boundary-y, 0, 0, 0])
+                0])
+                # 1 if (self.observer_vehicle.num_lanes-1 != self.observer_vehicle.lane_index[2]) else 0  # gibt es Spur rechts von aktueller Lane? -> Ja: 1, Nein: 0
+                # 1 if (0 != self.observer_vehicle.lane_index[2]) else 0                                  # gibt es Spur links von aktueller Lane? -> Ja: 1, Nein: 0
+            add_ego_obs2 = np.array([0, 0, 0, 0, 0])
             # in Datentyp des ObservationSpace umwandeln
             add_ego_obs1 = add_ego_obs1.astype(self.space().dtype)
             add_ego_obs2 = add_ego_obs2.astype(self.space().dtype)
 
             if add_ego_obs1.shape[0] < len(self.features):
                 # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
-                zeros = np.zeros((len(self.features) - len(add_ego_obs)))
+                zeros = np.zeros((len(self.features) - len(add_ego_obs1)))
                 add_ego_obs1 = np.hstack((add_ego_obs1, zeros))
                 add_ego_obs2 = np.hstack((add_ego_obs2, zeros))
             if add_ego_obs1.shape[0] > len(self.features):
                 # abfangen von inkompatibilitaets error: falls mehr observations als Laenge 'features' hinzugefuegt werden sollen dann abschneiden
-                add_ego_obs = add_ego_obs[:len(self.features)]
+                add_ego_obs1 = add_ego_obs1[:len(self.features)]
+                add_ego_obs2 = add_ego_obs2[:len(self.features)]
             obs = np.vstack([obs, add_ego_obs1, add_ego_obs2])
 
         # flatten observation from 2d-array to 1d-array

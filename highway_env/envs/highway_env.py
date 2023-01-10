@@ -30,7 +30,7 @@ class HighwayEnv(AbstractEnv):
         config.update({
             "observation": {
                 "type": "Kinematics",           # types aus 'highway_env\envs\common\observation'
-                "features": ["presence", "x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
+                "features": ["x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
                 "vehicles_count":     6,        # Number of observed vehicles (incl. ego-vehicle)
                 "observe_intentions": False,    # False = standard
                 "absolute":           True,     # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
