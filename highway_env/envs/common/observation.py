@@ -184,7 +184,7 @@ class KinematicObservation(ObservationType):
 
         Erste dim von shape mit 1 addiert, da zusaetzliche observations hinzugefuegt wurden
         """
-        return spaces.Box(shape=((self.vehicles_count+2), len(self.features)), low=-np.inf, high=np.inf, dtype=np.float32)
+        return spaces.Box(shape=((self.vehicles_count+1), len(self.features)), low=-np.inf, high=np.inf, dtype=np.float32)
 
     def normalize_obs(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -214,36 +214,57 @@ class KinematicObservation(ObservationType):
 
     def observe(self) -> np.ndarray:
         """Erstellt Observation output."""
+        # variable for different kind of observations ("1", "2")
+        choice = "2"
+
         if not self.env.road:
             return np.zeros(self.space().shape)
 
         # Add ego-vehicle
         # erstellt erste Zeile von Dataframe mit features als Spaltennamen und den dazugehoerigen Daten aus observer_vehicle
         df = pd.DataFrame.from_records([self.observer_vehicle.to_dict()])[self.features]
-        # Add nearby traffic
-        # liste aus den Fahrzeugen, die dem ego-vehicle am naechsten sind
-        close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
-                                                         self.env.PERCEPTION_DISTANCE, # 5*vehicle.max_speed = 200m
-                                                         count=self.vehicles_count - 1,
-                                                         see_behind=self.see_behind,
-                                                         sort=self.order == "sorted")
-        if close_vehicles:
-            origin = self.observer_vehicle if not self.absolute else None # Fahrzeug auf das die Koordianten der anderen Fahrzeuge bezogen werden sollen
-            df = pd.concat([df, pd.DataFrame.from_records(
-                [v.to_dict(origin, observe_intentions=self.observe_intentions)
-                 for v in close_vehicles[-self.vehicles_count + 1:]])[self.features]],
-                           ignore_index=True)
+        
+        if choice == "1":
+            # Add nearby traffic
+            # liste aus den Fahrzeugen, die dem ego-vehicle am naechsten sind
+            close_vehicles = self.env.road.close_vehicles_to(self.observer_vehicle,
+                                                            self.env.PERCEPTION_DISTANCE, # 5*vehicle.max_speed = 200m
+                                                            count=self.vehicles_count - 1,
+                                                            see_behind=self.see_behind,
+                                                            sort=self.order == "sorted")
+            if close_vehicles:
+                origin = self.observer_vehicle if not self.absolute else None # Fahrzeug auf das die Koordianten der anderen Fahrzeuge bezogen werden sollen
+                df = pd.concat([df, pd.DataFrame.from_records(
+                    [v.to_dict(origin, observe_intentions=self.observe_intentions)
+                     for v in close_vehicles[-self.vehicles_count + 1:]])[self.features]],
+                               ignore_index=True)
 
-        # Normalize and clip
-        if self.normalize:
-            df = self.normalize_obs(df)
-        # Fill missing rows with zeros; Change: fill missing rows with cars with same v as ego-vehicle and perception_distance away
-        if df.shape[0] < self.vehicles_count:
-            missing = self.vehicles_count - df.shape[0]
-            rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
-            for i in range(missing):
-                rows[i] = np.array([self.observer_vehicle.position[0]+self.env.PERCEPTION_DISTANCE, self.observer_vehicle.position[1], self.observer_vehicle.velocity[0], self.observer_vehicle.velocity[1]])
-            df = pd.concat([df, pd.DataFrame(data=rows, columns=self.features)], ignore_index=True)
+            # Normalize and clip
+            if self.normalize:
+                df = self.normalize_obs(df)
+            # Fill missing rows with zeros; Change: fill missing rows with cars with same v as ego-vehicle and perception_distance away
+            if df.shape[0] < self.vehicles_count:
+                missing = self.vehicles_count - df.shape[0]
+                rows = np.zeros((self.vehicles_count - df.shape[0], len(self.features)))
+                for i in range(missing):
+                    rows[i] = np.array([self.observer_vehicle.position[0]+self.env.PERCEPTION_DISTANCE, self.observer_vehicle.position[1], self.observer_vehicle.velocity[0], self.observer_vehicle.velocity[1]])
+                df = pd.concat([df, pd.DataFrame(data=rows, columns=self.features)], ignore_index=True)
+        
+        elif choice == "2":
+            close_vehicles0 = self.env.road.close_vehicles_to2(vehicle = self.observer_vehicle,
+                                                               distance= self.env.PERCEPTION_DISTANCE, 
+                                                               lane    = 0,
+                                                               features= self.features)
+            close_vehicles1 = self.env.road.close_vehicles_to2(vehicle = self.observer_vehicle,
+                                                               distance= self.env.PERCEPTION_DISTANCE, 
+                                                               lane    = 1,
+                                                               features= self.features)  
+            close_vehicles2 = self.env.road.close_vehicles_to2(vehicle = self.observer_vehicle,
+                                                               distance= self.env.PERCEPTION_DISTANCE, 
+                                                               lane    = 2,
+                                                               features= self.features)
+            df = pd.concat([df, close_vehicles0, close_vehicles1, close_vehicles2], ignore_index=True)                                                                                                  
+
         # Reorder
         df = df[self.features]
         obs = df.values.copy() # .values gibt array zurueck
@@ -256,8 +277,9 @@ class KinematicObservation(ObservationType):
             """
             zusaetzliche ego observations:
                 - Offset zur Mitte der target Lane
+                - offset zu rechter road Grenze
+                - offset zu linker road Grenze
                 - Gierwinkel
-
             
             Anzahl der zusaetzlichen observations DARF Anzahl features NICHT UEBERSCHREITEN, da
             sonst Inkompatibilitaet mit np.array besteht (Loesung: nur 1d Array fuer ObservationSpace erstellen)
@@ -271,25 +293,25 @@ class KinematicObservation(ObservationType):
             add_ego_obs1 = np.array([self.observer_vehicle.target_lane_offset[1], \
                 right_road_boundary-y, \
                 left_road_boundary-y, \
-                self.observer_vehicle.heading, \
-                0])
+                self.observer_vehicle.heading])
                 # 1 if (self.observer_vehicle.num_lanes-1 != self.observer_vehicle.lane_index[2]) else 0  # gibt es Spur rechts von aktueller Lane? -> Ja: 1, Nein: 0
                 # 1 if (0 != self.observer_vehicle.lane_index[2]) else 0                                  # gibt es Spur links von aktueller Lane? -> Ja: 1, Nein: 0
-            add_ego_obs2 = np.array([0, 0, 0, 0, 0])
-            # in Datentyp des ObservationSpace umwandeln
-            add_ego_obs1 = add_ego_obs1.astype(self.space().dtype)
-            add_ego_obs2 = add_ego_obs2.astype(self.space().dtype)
+            # add_ego_obs2 = np.array([0, 0, 0, 0, 0])
+            # # in Datentyp des ObservationSpace umwandeln
+            # add_ego_obs1 = add_ego_obs1.astype(self.space().dtype)
+            # add_ego_obs2 = add_ego_obs2.astype(self.space().dtype)
 
-            if add_ego_obs1.shape[0] < len(self.features):
-                # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
-                zeros = np.zeros((len(self.features) - len(add_ego_obs1)))
-                add_ego_obs1 = np.hstack((add_ego_obs1, zeros))
-                add_ego_obs2 = np.hstack((add_ego_obs2, zeros))
-            if add_ego_obs1.shape[0] > len(self.features):
-                # abfangen von inkompatibilitaets error: falls mehr observations als Laenge 'features' hinzugefuegt werden sollen dann abschneiden
-                add_ego_obs1 = add_ego_obs1[:len(self.features)]
-                add_ego_obs2 = add_ego_obs2[:len(self.features)]
-            obs = np.vstack([obs, add_ego_obs1, add_ego_obs2])
+            # if add_ego_obs1.shape[0] < len(self.features):
+            #     # falls individuell hinzugefuegte observations kuerzer als self.features -> mit Nullen auffuellen
+            #     zeros = np.zeros((len(self.features) - len(add_ego_obs1)))
+            #     add_ego_obs1 = np.hstack((add_ego_obs1, zeros))
+            #     add_ego_obs2 = np.hstack((add_ego_obs2, zeros))
+            # if add_ego_obs1.shape[0] > len(self.features):
+            #     # abfangen von inkompatibilitaets error: falls mehr observations als Laenge 'features' hinzugefuegt werden sollen dann abschneiden
+            #     add_ego_obs1 = add_ego_obs1[:len(self.features)]
+            #     add_ego_obs2 = add_ego_obs2[:len(self.features)]
+            # obs = np.vstack([obs, add_ego_obs1, add_ego_obs2])
+            obs = np.vstack([obs, add_ego_obs1])
 
         # flatten observation from 2d-array to 1d-array
         # obs = obs.flatten()

@@ -53,7 +53,7 @@ class IDMVehicle(ControlledVehicle):
                  target_lane_index: int = None,
                  target_speed: float = None,
                  route: Route = None,
-                 enable_lane_change: bool = True,
+                 enable_lane_change: bool = False,
                  timer: float = None):
         super().__init__(road, position, heading, speed, target_lane_index, target_speed, route)
         self.enable_lane_change = enable_lane_change

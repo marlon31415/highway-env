@@ -165,7 +165,7 @@ class AbstractEnv(gym.Env):
         ego_pos     = self.vehicle.position      # position of ego-vehicle
         ego_pos_r   = ego_pos - d_center*ego_dir # Mittelpunkt Kreis hinten
         ego_pos_f   = ego_pos + d_center*ego_dir # Mittelpunkt Kreis vorne
-        ego_lane_id = self.vehicle.lane_index[2] # lane id of the lane where ego-vehicle is driving
+        ego_lane_id = self.vehicle.lane_index[2] # lane id of the lane on which ego-vehicle is driving
 
         for vehicle in self.road.vehicles[1:]: # self.road.vehicles ist Liste mit allen erzeugten Fahzeugen; erster Listeneintrag ist ego-vehicle
             """

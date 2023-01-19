@@ -31,7 +31,7 @@ class HighwayEnv(AbstractEnv):
             "observation": {
                 "type": "Kinematics",           # types aus 'highway_env\envs\common\observation'
                 "features": ["x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
-                "vehicles_count":     6,        # Number of observed vehicles (incl. ego-vehicle)
+                "vehicles_count":     7,        # Number of observed vehicles (incl. ego-vehicle)
                 "observe_intentions": False,    # False = standard
                 "absolute":           True,     # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
                 "normalize":          False,    # normalsiert Observation zwischen -1 und 1; True = standard
@@ -55,6 +55,7 @@ class HighwayEnv(AbstractEnv):
             "reward_speed_range":    [20, 30],# [m/s] nur in diesem Bereich gibt es reward fuer Geschwindigkeit
             "collision_trunc":       True,    # definiert ob Durchlauf mit crash des Fahrzeugs endet; default: True
             "offroad_trunc":         True,    # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
+            "speed_trunc":           True,
             "speed_limit":           30,      # v_max auf Road
             "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
         })
@@ -85,8 +86,8 @@ class HighwayEnv(AbstractEnv):
         others_after_ego  = others - others_before_ego
 
         for _ in range(others_before_ego):
-                """ Autos erzeugen, die weiter links als ego-vehicle sind """
-                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(23,25))
+                """ Autos erzeugen, die hinter ego-vehicle fahren """
+                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(20,25))
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)
         
@@ -103,8 +104,8 @@ class HighwayEnv(AbstractEnv):
         self.road.vehicles.insert(0, vehicle) # vehicles-liste in Road-klasse
         
         for _ in range(others_after_ego):
-                """ Autos erzeugen, die weiter rechts als ego-vehicle sind """
-                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(18,22))
+                """ Autos erzeugen, die vor ego-vehicle fahrren """
+                vehicle = other_vehicles_type.create_random(self.road, spacing=1 / self.config["vehicles_density"], speed=np.random.uniform(17,22))
                 vehicle.randomize_behavior()
                 self.road.vehicles.append(vehicle)        
         
@@ -151,7 +152,7 @@ class HighwayEnv(AbstractEnv):
             else self.vehicle.lane_index[2]
         lane_width = self.vehicle.lane.DEFAULT_WIDTH
         # Use forward speed rather than speed, see https://github.com/eleurent/highway-env/issues/268
-        forward_speed = self.vehicle.velocity[0] # berechnet mit Gierwinkel theta und Schwimmwinkel beta
+        forward_speed = self.vehicle.velocity[0] # berechnet mit Gierwinkel psi und Schwimmwinkel beta
         scaled_speed = utils.lmap(forward_speed, self.config["reward_speed_range"], [0, 1])
         
         """reward berechnen: aehnlich wie in MPC"""
@@ -200,7 +201,8 @@ class HighwayEnv(AbstractEnv):
             self.off_road_counter = 0
 
         return (self.config["collision_trunc"] and self.vehicle.crashed) or \
-               (self.config["offroad_trunc"]   and self.off_road_counter >= 5)
+               (self.config["offroad_trunc"]   and self.off_road_counter >= 5) or \
+               (self.config["speed_trunc"]     and self.vehicle.speed < 16) 
 
     def _is_truncation(self) -> bool:
         """

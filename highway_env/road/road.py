@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import logging
 from typing import List, Tuple, Dict, TYPE_CHECKING, Optional
 
@@ -327,6 +328,37 @@ class Road(object):
         if count:
             vehicles = vehicles[:count]
         return vehicles
+
+    def close_vehicles_to2(self, vehicle: 'kinematics.Vehicle', distance: float, lane: int=0, features: List[str]=None) -> object:
+        """
+        gibt (sortierte) Liste mit den Fahrzeugen, die dem zu steuernden am naechsten sind
+        und auf einer bestimmten lane fahren
+        """
+        vehicles_pos = [v for v in self.vehicles
+                        if v is not vehicle
+                        and np.linalg.norm(v.position - vehicle.position) < distance
+                        and (v.lane_index[2] == lane)
+                        and vehicle.lane_distance_to(v)>=0]
+        if vehicles_pos:
+            vehicle_pos = sorted(vehicles_pos, key=lambda v: abs(vehicle.lane_distance_to(v)))[0]
+            df_pos      = pd.DataFrame.from_records([vehicle_pos.to_dict(origin_vehicle=None, observe_intentions=False)])[features]
+        else:
+            vehicle_pos = np.array([[vehicle.position[0]+distance, 4*lane, vehicle.velocity[0], vehicle.velocity[1]]])
+            df_pos = pd.DataFrame(data=vehicle_pos, columns=features)
+            
+        vehicles_neg = [v for v in self.vehicles
+                        if v is not vehicle
+                        and np.linalg.norm(v.position - vehicle.position) < distance
+                        and (v.lane_index[2] == lane)
+                        and vehicle.lane_distance_to(v)<0]
+        if vehicles_neg:
+            vehicle_neg = sorted(vehicles_neg, key=lambda v: abs(vehicle.lane_distance_to(v)))[0]
+            df_neg      = pd.DataFrame.from_records([vehicle_neg.to_dict(origin_vehicle=None, observe_intentions=False)])[features]
+        else:
+            vehicle_neg = np.array([[vehicle.position[0]-distance, 4*lane, vehicle.velocity[0], vehicle.velocity[1]]])
+            df_neg = pd.DataFrame(data=vehicle_neg, columns=features)
+        
+        return pd.concat([df_pos, df_neg], ignore_index=True)
 
     def act(self) -> None:
         """Decide the actions of each entity on the road."""
