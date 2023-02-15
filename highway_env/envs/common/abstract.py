@@ -185,8 +185,13 @@ class AbstractEnv(gym.Env):
             veh_pos_r = veh_pos - d_center*veh_dir # Mittelpunkt Kreis hinten
             veh_pos_f = veh_pos + d_center*veh_dir # Mittelpunkt Kreis vorne
 
+            # pruefen ob Fahrzeuge auf derselben Spur sind
+            same_lane = ego_lane_id == vehicle.lane_index[2]
+
             # Relativgeschwindigkeit
             delta_v = ego_vel - veh_vel
+            # Relativgeschwindigkeit abhaengig davon ob Fahrzeuge hinter- oder nebeneinander fahren (falls nebeneinander, dann v_x vernachlaessigen)
+            delta_v = delta_v if same_lane else delta_v*np.array([0,1])
 
             # Safety Index Parameter d: distance (always positive)
             ego_to_vehicle_direction = np.array([ego_pos_r-veh_pos_r,
@@ -198,7 +203,7 @@ class AbstractEnv(gym.Env):
 
             # Safety Index Parameter dotd: time derivative of d
             # Geschwindigkeit mit der ego-vehicle auf anderes vehicle zufaehrt
-            # Annahme: v_Fahrzeugmitte = v_Mittelpunkt_Kreis1 = v_Mittelpunkt_Kreis2
+            # Annahme: v_{Fahrzeugmitte} = v_{Mittelpunkt_Kreis1} = v_{Mittelpunkt_Kreis2}
             # if dotd <0, then we are getting closer to hazard
             dotd = delta_v @ ego_to_vehicle_direction.transpose() / d
             
@@ -221,7 +226,7 @@ class AbstractEnv(gym.Env):
         Safety Index zu linker Road Grenze berechnen
         """
         # Mindestabstand von Mittelpunkt Kreis bis Road Boundary
-        d_min_boundary = 0 # r_circle - 0.3
+        d_min_boundary = 0 
         
         d_left1 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_r)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH # parameter d from Safety Index; positve when on road
         d_left2 = self.vehicle.lane.DEFAULT_WIDTH/2 + self.vehicle.lane_offset_method(ego_pos_f)[1] + ego_lane_id*self.vehicle.lane.DEFAULT_WIDTH

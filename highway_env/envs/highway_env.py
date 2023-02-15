@@ -31,7 +31,7 @@ class HighwayEnv(AbstractEnv):
             "observation": {
                 "type": "Kinematics",           # types aus 'highway_env\envs\common\observation'
                 "features": ["x", "y", "vx", "vy"], # features die in Observation auftauchen sollen
-                "vehicles_count":     7,        # Number of observed vehicles (incl. ego-vehicle)
+                "vehicles_count":     7,        # Number of observed vehicles (incl. ego-vehicle) -> 7 fuer neue observation!
                 "observe_intentions": False,    # False = standard
                 "absolute":           True,     # False = Koordinaten im observation_space sind relativ zum ego-vehicle; ego-vehicle KO bleiben absolut
                 "normalize":          False,    # normalsiert Observation zwischen -1 und 1; True = standard
@@ -169,6 +169,7 @@ class HighwayEnv(AbstractEnv):
         reward += offset                                             # reward von [-offset,0] auf [0,offset] transformieren
         reward = np.exp(reward) - 1                                  # reward exponentiell werten (reward=0 ergibt wieder 0 durch die -1)
         reward = utils.lmap(reward, [0, (np.exp(offset)-1)], [0, 1]) # reward auf Intervall [0,1] normalisieren 
+        reward += self.config["collision_reward"] * self.vehicle.crashed
 
         """alternativer reward: wie urspruenglich vorgeschlagen"""
         ## collision reward: bei crash mit anderem Fahrzeug \
@@ -201,7 +202,7 @@ class HighwayEnv(AbstractEnv):
             self.off_road_counter = 0
 
         return (self.config["collision_trunc"] and self.vehicle.crashed) or \
-               (self.config["offroad_trunc"]   and self.off_road_counter >= 5) or \
+               (self.config["offroad_trunc"]   and self.off_road_counter >= 3) or \
                (self.config["speed_trunc"]     and self.vehicle.speed < 16) 
 
     def _is_truncation(self) -> bool:
