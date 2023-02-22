@@ -186,7 +186,8 @@ class AbstractEnv(gym.Env):
             veh_pos_f = veh_pos + d_center*veh_dir # Mittelpunkt Kreis vorne
 
             # pruefen ob Fahrzeuge auf derselben Spur sind
-            same_lane = ego_lane_id == vehicle.lane_index[2]
+            # same_lane = ego_lane_id == vehicle.lane_index[2]    # nur wenn auf derselben Spur
+            same_lane = abs(ego_pos[1]-veh_pos[1]) < 3          # auch nah an der Spur des anderen Fahrzeugs 
 
             # Relativgeschwindigkeit
             delta_v = ego_vel - veh_vel

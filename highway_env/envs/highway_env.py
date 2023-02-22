@@ -57,7 +57,8 @@ class HighwayEnv(AbstractEnv):
             "offroad_trunc":         True,    # definiert ob Durchlauf mit Verlassen des Fahrzeugs von der Strasse endet; default: False
             "speed_trunc":           True,
             "speed_limit":           30,      # v_max auf Road
-            "prediction_type": "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
+            "prediction_type":       "zero_steering", # soll Trajektorie mit konstanter Geschwindigkeit und "constant_steering" oder "zero_steering" berechnet werden
+            "reward_mode":           "learn"  # "learn": for RL and "performance": to compare different policies      
         })
         return config
 
@@ -160,16 +161,21 @@ class HighwayEnv(AbstractEnv):
         lane_goal  = 8
         reward_scale = 40
         
-        reward = \
-            - self.config["right_lane_reward"] * (self.vehicle.target_lane_offset[1])**2 \
-            - self.config["high_speed_reward"] * (speed_goal - forward_speed)**2
+        if self.config["reward_mode"] == "learn":
+            # reward for RL
+            reward = \
+                - self.config["right_lane_reward"] * (self.vehicle.target_lane_offset[1])**2 \
+                - self.config["high_speed_reward"] * (speed_goal - forward_speed)**2
             
-        reward /= reward_scale # skalieren damit reward nicht zu groß
-        offset = ( self.config["right_lane_reward"] * (lane_goal+2)**2 + self.config["high_speed_reward"] * speed_goal**2 ) / reward_scale # maximaler negativer reward
-        reward += offset                                             # reward von [-offset,0] auf [0,offset] transformieren
-        reward = np.exp(reward) - 1                                  # reward exponentiell werten (reward=0 ergibt wieder 0 durch die -1)
-        reward = utils.lmap(reward, [0, (np.exp(offset)-1)], [0, 1]) # reward auf Intervall [0,1] normalisieren 
-        reward += self.config["collision_reward"] * self.vehicle.crashed
+            reward /= reward_scale # skalieren damit reward nicht zu groß
+            offset = ( self.config["right_lane_reward"] * (lane_goal+2)**2 + self.config["high_speed_reward"] * speed_goal**2 ) / reward_scale # maximaler negativer reward
+            reward += offset                                             # reward von [-offset,0] auf [0,offset] transformieren
+            reward = np.exp(reward) - 1                                  # reward exponentiell werten (reward=0 ergibt wieder 0 durch die -1)
+            reward = utils.lmap(reward, [0, (np.exp(offset)-1)], [0, 1]) # reward auf Intervall [0,1] normalisieren 
+            reward += self.config["collision_reward"] * self.vehicle.crashed
+        else:
+            # reward to compare different policies (e.g. MPC and RL)
+            reward = - 0.1*self.vehicle.target_lane_offset[1]**2 - 0.9*(speed_goal - forward_speed)**2
 
         """alternativer reward: wie urspruenglich vorgeschlagen"""
         ## collision reward: bei crash mit anderem Fahrzeug \
