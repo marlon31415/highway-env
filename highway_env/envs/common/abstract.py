@@ -187,7 +187,7 @@ class AbstractEnv(gym.Env):
 
             # pruefen ob Fahrzeuge auf derselben Spur sind
             # same_lane = ego_lane_id == vehicle.lane_index[2]    # nur wenn auf derselben Spur
-            same_lane = abs(ego_pos[1]-veh_pos[1]) < 3          # auch nah an der Spur des anderen Fahrzeugs 
+            same_lane = abs(ego_pos[1]-veh_pos[1]) < 3.5          # auch nah an der Spur des anderen Fahrzeugs 
 
             # Relativgeschwindigkeit
             delta_v = ego_vel - veh_vel
@@ -355,7 +355,7 @@ class AbstractEnv(gym.Env):
         self.phi, veh_index = self.adaptive_safety_index()
         # cost = phi(s') - max{phi(s)-eta, 0}
         self.delta_phi = self.phi - max(old_phi-self.eta, 0)
-        self.delta_phi = np.clip(self.delta_phi, -0.1, 100)   # negative Begrenzung, damit policy nicht versucht möglichst großen Abstand zu vorfahrenden Fahrzeugen zu halten; wird aber auch in Buffer gemacht
+        # self.delta_phi = np.clip(self.delta_phi, -0.1, 100) # clip wird in Buffer gemacht
         # update info dict
         info.update({'delta_phi': self.delta_phi})
         info.update({'phi': self.phi})

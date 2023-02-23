@@ -209,7 +209,7 @@ class HighwayEnv(AbstractEnv):
 
         return (self.config["collision_trunc"] and self.vehicle.crashed) or \
                (self.config["offroad_trunc"]   and self.off_road_counter >= 3) or \
-               (self.config["speed_trunc"]     and self.vehicle.speed < 16) 
+               (self.config["speed_trunc"]     and self.vehicle.speed < 16.5) 
 
     def _is_truncation(self) -> bool:
         """
